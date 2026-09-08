@@ -9,9 +9,13 @@ const BUNNY_CDN_HOST = process.env.BUNNY_CDN_HOSTNAME;
 
 type BunnyVideoResponse = {
   status: number;
+  guid?: string;
+  title?: string;
   length?: number;
   encodeProgress?: number;
   storageSize?: number;
+  hasOriginal?: boolean;
+  originalHash?: string | null;
   thumbnailFileName?: string | null;
   chapters?: Array<{ title: string; start: number; end: number }>;
   transcodingMessages?: Array<{
@@ -61,7 +65,10 @@ export async function uploadBunnyVideo(videoId: string, body: ArrayBuffer) {
       // Bunny Stream's direct endpoint consumes the raw file stream. Passing
       // a browser-specific MIME type can yield a 200 response but leave the
       // asset indefinitely queued at 0%; use the protocol's binary media type.
-      headers: { AccessKey: BUNNY_API_KEY, "Content-Type": "application/octet-stream" },
+      headers: {
+        AccessKey: BUNNY_API_KEY,
+        "Content-Type": "application/octet-stream",
+      },
       body,
     },
   );
@@ -70,10 +77,10 @@ export async function uploadBunnyVideo(videoId: string, body: ArrayBuffer) {
 
 // Step 2: generate short-lived, signed credentials so the BROWSER can
 // upload directly to Bunny via TUS - without ever seeing our real API
-// key. The signature expires in 1 hour, and is only valid for this one
+// key. The signature expires in 24 hours, and is only valid for this one
 // videoId, so it can't be reused for anything else even if intercepted.
 export function getTusUploadCredentials(videoId: string) {
-  const expiration = Math.floor(Date.now() / 1000) + 3600; // 1 hour
+  const expiration = Math.floor(Date.now() / 1000) + 86400; // 24 hours
   const signature = crypto
     .createHash("sha256")
     .update(`${BUNNY_LIBRARY_ID}${BUNNY_API_KEY}${expiration}${videoId}`)
@@ -103,23 +110,64 @@ export async function getBunnyVideoStatus(videoId: string) {
 
   const data = (await res.json()) as BunnyVideoResponse;
   const failed = data.status === 5 || data.status === 6;
+  const storageSize = data.storageSize ?? 0;
+  const notUploaded = !failed && data.status === 0;
 
   return {
     ready: data.status === 4,
     failed,
-    notUploaded: data.status === 0 && (data.storageSize ?? 0) === 0,
+    notUploaded,
     status: data.status,
     encodeProgress: data.encodeProgress ?? 0,
-    storageSize: data.storageSize ?? 0,
+    storageSize,
+    length: data.length,
+    hasOriginal: data.hasOriginal ?? false,
+    originalHash: data.originalHash ?? null,
     durationSeconds: data.length,
     message:
       data.transcodingMessages?.find((item) => item.message)?.message ??
-      (data.status === 0 && (data.storageSize ?? 0) === 0
-        ? "Bunny has not received the video file yet."
+      (notUploaded
+        ? `Bunny reports status ${data.status}, but no video bytes are stored yet.`
         : null),
     thumbnailUrl: data.thumbnailFileName
       ? `https://vz-${BUNNY_LIBRARY_ID}.b-cdn.net/${videoId}/${data.thumbnailFileName}`
       : null,
+  };
+}
+
+/**
+ * Read a Bunny-generated thumbnail through Bunny's own player origin.
+ *
+ * A Stream library's numeric ID is not its CDN hostname, and libraries can
+ * restrict direct media requests by Referer. The embed page knows the correct
+ * pull-zone hostname and is explicitly allowed to load its poster, so we use
+ * it rather than guessing a `vz-${libraryId}` URL.
+ */
+export async function readBunnyThumbnail(videoId: string) {
+  const embedUrl = getBunnyEmbedUrl(videoId);
+  const page = await fetch(embedUrl);
+  if (!page.ok) throw new Error(`Bunny player page failed: ${page.status}`);
+
+  const markup = await page.text();
+  const posterMatch = markup.match(/\bdata-poster="([^"]+)"/i);
+  if (!posterMatch?.[1])
+    throw new Error("Bunny thumbnail is not available yet.");
+
+  const posterUrl = new URL(posterMatch[1]);
+  if (
+    posterUrl.protocol !== "https:" ||
+    !posterUrl.hostname.endsWith(".b-cdn.net")
+  ) {
+    throw new Error("Bunny returned an invalid thumbnail URL.");
+  }
+
+  const res = await fetch(posterUrl, {
+    headers: { Referer: "https://iframe.mediadelivery.net/" },
+  });
+  if (!res.ok) throw new Error(`Bunny thumbnail read failed: ${res.status}`);
+  return {
+    body: await res.arrayBuffer(),
+    contentType: res.headers.get("content-type") ?? "image/jpeg",
   };
 }
 
@@ -152,7 +200,9 @@ export async function syncBunnyVideoChapters(
 
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
-    throw new Error(`Bunny chapter sync failed: ${res.status}${detail ? ` — ${detail.slice(0, 300)}` : ""}`);
+    throw new Error(
+      `Bunny chapter sync failed: ${res.status}${detail ? ` — ${detail.slice(0, 300)}` : ""}`,
+    );
   }
 }
 
@@ -219,5 +269,42 @@ export async function deleteFromBunnyStorage(storageKey: string) {
 
   if (!res.ok && res.status !== 404) {
     throw new Error(`Bunny storage delete failed: ${res.status}`);
+  }
+}
+
+/** Read a stored object server-side without exposing the Storage API key. */
+export async function readFromBunnyStorage(storageKey: string) {
+  const { zone, key } = requireStorageConfig();
+  const res = await fetch(
+    `https://storage.bunnycdn.com/${zone}/${storageKey}`,
+    {
+      headers: { AccessKey: key },
+    },
+  );
+  if (!res.ok) throw new Error(`Bunny storage read failed: ${res.status}`);
+  return {
+    body: await res.arrayBuffer(),
+    contentType: res.headers.get("content-type") ?? "application/octet-stream",
+  };
+}
+export async function deleteBunnyVideo(videoId: string) {
+  const res = await fetch(
+    `https://video.bunnycdn.com/library/${BUNNY_LIBRARY_ID}/videos/${videoId}`,
+    {
+      method: "DELETE",
+      headers: {
+        AccessKey: BUNNY_API_KEY,
+      },
+    },
+  );
+
+  if (!res.ok && res.status !== 404) {
+    const detail = await res.text().catch(() => "");
+
+    throw new Error(
+      `Bunny video delete failed: ${res.status}${
+        detail ? ` — ${detail.slice(0, 300)}` : ""
+      }`,
+    );
   }
 }

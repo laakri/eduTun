@@ -29,7 +29,11 @@ function extractErrorMessage(body: unknown, res: Response): string {
     if (Array.isArray(b.errors) && b.errors.length > 0) {
       const first = b.errors[0];
       if (typeof first === "string") return first;
-      if (first && typeof first === "object" && typeof (first as any).message === "string") {
+      if (
+        first &&
+        typeof first === "object" &&
+        typeof (first as any).message === "string"
+      ) {
         return (first as any).message;
       }
     }
@@ -94,7 +98,8 @@ export default function NewCoursePage() {
           body = raw ? JSON.parse(raw) : null;
         } catch (parseErr) {
           console.error("GET /api/categories returned non-JSON body:", raw);
-          if (!cancelled) setCategoriesError("Categories response wasn't valid JSON.");
+          if (!cancelled)
+            setCategoriesError("Categories response wasn't valid JSON.");
           return;
         }
 
@@ -203,18 +208,22 @@ export default function NewCoursePage() {
       const responseBody = await res.json();
       // `ok()` may return the course bare, or wrapped as `{ data: course }` /
       // `{ course }` / `{ success: true, data: course }` — support all of them.
-      const course =
-        responseBody?.id
-          ? responseBody
-          : responseBody?.data?.id
-            ? responseBody.data
-            : responseBody?.course?.id
-              ? responseBody.course
-              : null;
+      const course = responseBody?.id
+        ? responseBody
+        : responseBody?.data?.id
+          ? responseBody.data
+          : responseBody?.course?.id
+            ? responseBody.course
+            : null;
 
       if (!course?.id) {
-        console.error("POST /api/courses succeeded but no course.id found in response:", responseBody);
-        throw new Error("Course was created, but the response didn't include its id.");
+        console.error(
+          "POST /api/courses succeeded but no course.id found in response:",
+          responseBody,
+        );
+        throw new Error(
+          "Course was created, but the response didn't include its id.",
+        );
       }
 
       // The course must exist before Bunny Storage can receive a stable,
@@ -229,7 +238,10 @@ export default function NewCoursePage() {
         });
         if (!coverResponse.ok) {
           const body = await coverResponse.json().catch(() => null);
-          throw new Error(body?.error?.message ?? "Course created, but the Bunny cover upload failed.");
+          throw new Error(
+            body?.error?.message ??
+              "Course created, but the Bunny cover upload failed.",
+          );
         }
       }
 
@@ -270,9 +282,12 @@ export default function NewCoursePage() {
       </div>
 
       <div className="mb-8">
-        <h1 className="text-2xl font-medium text-foreground">Let's set up your course</h1>
+        <h1 className="text-2xl font-medium text-foreground">
+          Let's set up your course
+        </h1>
         <p className="mt-1 text-[13px] text-muted-foreground">
-          Add the basics now — you can refine everything later, and you'll add chapters next.
+          Add the basics now — you can refine everything later, and you'll add
+          chapters next.
         </p>
       </div>
 
@@ -280,7 +295,9 @@ export default function NewCoursePage() {
         <div className="rounded-xl border border-border bg-card p-6 shadow-sm sm:p-8">
           {/* Cover image */}
           <div>
-            <label className="mb-2 block text-[13px] text-foreground/70">Cover image</label>
+            <label className="mb-2 block text-[13px] text-foreground/70">
+              Cover image
+            </label>
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
@@ -296,13 +313,19 @@ export default function NewCoursePage() {
               }}
               className={cn(
                 "group relative flex aspect-[21/9] w-full items-center justify-center overflow-hidden rounded-lg border border-dashed transition-colors",
-                dragActive ? "border-primary bg-primary/5" : "border-border bg-muted/40 hover:bg-muted/60",
+                dragActive
+                  ? "border-primary bg-primary/5"
+                  : "border-border bg-muted/40 hover:bg-muted/60",
               )}
             >
               {coverPreview ? (
                 <>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={coverPreview} alt="" className="size-full object-cover" />
+                  <img
+                    src={coverPreview}
+                    alt=""
+                    className="size-full object-cover"
+                  />
                   <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/40 group-hover:opacity-100">
                     <span className="text-[13px] text-white">Change cover</span>
                   </div>
@@ -324,8 +347,12 @@ export default function NewCoursePage() {
               ) : (
                 <div className="flex flex-col items-center gap-2 text-muted-foreground">
                   <ImagePlus className="size-5" />
-                  <span className="text-[13px]">Drop an image, or click to browse</span>
-                  <span className="text-[11px] text-muted-foreground/70">Recommended 1280×550</span>
+                  <span className="text-[13px]">
+                    Drop an image, or click to browse
+                  </span>
+                  <span className="text-[11px] text-muted-foreground/70">
+                    Recommended 1280×550
+                  </span>
                 </div>
               )}
             </button>
@@ -340,7 +367,10 @@ export default function NewCoursePage() {
 
           {/* Title */}
           <div className="mt-7">
-            <label htmlFor="title" className="mb-2 block text-[13px] text-foreground/70">
+            <label
+              htmlFor="title"
+              className="mb-2 block text-[13px] text-foreground/70"
+            >
               Title
             </label>
             <input
@@ -355,7 +385,10 @@ export default function NewCoursePage() {
           {/* Description */}
           <div className="mt-7">
             <div className="mb-2 flex items-center justify-between">
-              <label htmlFor="description" className="block text-[13px] text-foreground/70">
+              <label
+                htmlFor="description"
+                className="block text-[13px] text-foreground/70"
+              >
                 Description
               </label>
               <span className="text-[11px] text-muted-foreground/70">
@@ -365,7 +398,9 @@ export default function NewCoursePage() {
             <textarea
               id="description"
               value={description}
-              onChange={(e) => setDescription(e.target.value.slice(0, DESCRIPTION_LIMIT))}
+              onChange={(e) =>
+                setDescription(e.target.value.slice(0, DESCRIPTION_LIMIT))
+              }
               rows={4}
               placeholder="What will students learn in this course?"
               className="w-full resize-none rounded-md border border-input bg-transparent px-3 py-2 text-[14px] leading-relaxed text-foreground outline-none transition-colors placeholder:text-muted-foreground/40 focus:border-primary focus:ring-2 focus:ring-ring/30"
@@ -375,7 +410,10 @@ export default function NewCoursePage() {
           {/* Category + tags */}
           <div className="mt-7 grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div>
-              <label htmlFor="category" className="mb-2 block text-[13px] text-foreground/70">
+              <label
+                htmlFor="category"
+                className="mb-2 block text-[13px] text-foreground/70"
+              >
                 Category
               </label>
               <select
@@ -392,12 +430,17 @@ export default function NewCoursePage() {
                 ))}
               </select>
               {categoriesError && (
-                <p className="mt-1 text-[11px] text-destructive">{categoriesError}</p>
+                <p className="mt-1 text-[11px] text-destructive">
+                  {categoriesError}
+                </p>
               )}
             </div>
 
             <div>
-              <label htmlFor="tags" className="mb-2 block text-[13px] text-foreground/70">
+              <label
+                htmlFor="tags"
+                className="mb-2 block text-[13px] text-foreground/70"
+              >
                 Tags
               </label>
               <input
@@ -419,7 +462,9 @@ export default function NewCoursePage() {
                   ))}
                 </div>
               ) : (
-                <p className="mt-1 text-[11px] text-muted-foreground/70">Separate with commas</p>
+                <p className="mt-1 text-[11px] text-muted-foreground/70">
+                  Separate with commas
+                </p>
               )}
             </div>
           </div>

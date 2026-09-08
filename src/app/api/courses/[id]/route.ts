@@ -2,12 +2,14 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { ok, withErrorHandler } from "@/lib/api-response";
 import { parseBody } from "@/lib/parse-body";
-import {
-  assertCanEditCourse,
-  requireCourseManager,
-} from "@/core/auth.service";
+import { assertCanEditCourse, requireCourseManager } from "@/core/auth.service";
 import { NotFoundError } from "@/lib/errors";
-import { getBunnyCdnUrl, getBunnyEmbedUrl } from "@/lib/bunny";
+import {
+  getBunnyCdnUrl,
+  getBunnyEmbedUrl,
+  deleteBunnyVideo,
+  deleteFromBunnyStorage,
+} from "@/lib/bunny";
 
 const courseInclude = {
   categories: { include: { category: true } },
@@ -30,6 +32,7 @@ const updateCourseSchema = z.object({
 export const GET = withErrorHandler(
   async (_req, { params }: { params: Promise<{ id: string }> }) => {
     await requireCourseManager();
+
     const { id } = await params;
 
     const course = await db.course.findUnique({
@@ -37,7 +40,10 @@ export const GET = withErrorHandler(
       include: courseInclude,
     });
 
-    if (!course) throw new NotFoundError("Course");
+    if (!course) {
+      throw new NotFoundError("Course");
+    }
+
     await assertCanEditCourse(course);
 
     const coverImageUrl = course.coverImageKey
@@ -65,15 +71,25 @@ export const GET = withErrorHandler(
 export const PATCH = withErrorHandler(
   async (req, { params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
-    const existing = await db.course.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundError("Course");
+
+    const existing = await db.course.findUnique({
+      where: { id },
+    });
+
+    if (!existing) {
+      throw new NotFoundError("Course");
+    }
+
     await assertCanEditCourse(existing);
 
     const body = await parseBody(req, updateCourseSchema);
 
     const course = await db.$transaction(async (tx) => {
       if (body.categoryIds) {
-        await tx.courseCategory.deleteMany({ where: { courseId: id } });
+        await tx.courseCategory.deleteMany({
+          where: { courseId: id },
+        });
+
         await tx.courseCategory.createMany({
           data: body.categoryIds.map((categoryId) => ({
             courseId: id,
@@ -86,9 +102,11 @@ export const PATCH = withErrorHandler(
         where: { id },
         data: {
           ...(body.title !== undefined ? { title: body.title } : {}),
+
           ...(body.description !== undefined
             ? { description: body.description }
             : {}),
+
           ...(body.published !== undefined
             ? { published: body.published }
             : {}),
@@ -98,6 +116,70 @@ export const PATCH = withErrorHandler(
     });
 
     return ok(course);
+  },
+);
+
+export const DELETE = withErrorHandler(
+  async (_req, { params }: { params: Promise<{ id: string }> }) => {
+    const { id } = await params;
+
+    const course = await db.course.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        profId: true,
+        coverImageKey: true,
+        chapters: {
+          select: {
+            id: true,
+            videoProvider: true,
+            videoId: true,
+            resources: {
+              select: {
+                storageKey: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!course) {
+      throw new NotFoundError("Course");
+    }
+
+    await assertCanEditCourse(course);
+
+    // Delete course cover from Bunny Storage
+    if (course.coverImageKey) {
+      await deleteFromBunnyStorage(course.coverImageKey);
+    }
+
+    // Delete chapter videos and resources
+    for (const chapter of course.chapters) {
+      // Delete Bunny video
+      if (chapter.videoProvider === "bunny" && chapter.videoId) {
+        await deleteBunnyVideo(chapter.videoId);
+      }
+
+      // Delete chapter resources from Bunny Storage
+      for (const resource of chapter.resources) {
+        if (resource.storageKey) {
+          await deleteFromBunnyStorage(resource.storageKey);
+        }
+      }
+    }
+
+    // Delete course and all related DB records
+    // Prisma cascade rules handle chapters, sections,
+    // resources, progress, quizzes, categories, tags, etc.
+    await db.course.delete({
+      where: { id },
+    });
+
+    return ok({
+      message: "Course and all associated content deleted successfully",
+    });
   },
 );
 

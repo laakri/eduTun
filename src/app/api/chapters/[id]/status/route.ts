@@ -25,7 +25,7 @@ export const GET = withErrorHandler(
     ) {
       await db.chapter.update({
         where: { id },
-        data: { durationSeconds: status.durationSeconds },
+        data: { durationSeconds: status.durationSeconds, ready: true },
       });
     }
 

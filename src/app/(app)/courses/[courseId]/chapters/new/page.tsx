@@ -1,8 +1,8 @@
 "use client";
 
-
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import * as tus from "tus-js-client";
 import {
   CheckCircle2,
   Clock,
@@ -58,12 +58,19 @@ type BunnyStatus = {
   notUploaded: boolean;
   status: number;
   encodeProgress: number;
+  storageSize: number;
   durationSeconds?: number;
   message: string | null;
   thumbnailUrl: string | null;
 };
 
-type Phase = "idle" | "creating" | "uploading" | "processing" | "ready" | "error";
+type Phase =
+  | "idle"
+  | "creating"
+  | "uploading"
+  | "processing"
+  | "ready"
+  | "error";
 
 type SectionDraft = {
   id: string;
@@ -81,6 +88,26 @@ function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function bunnyStatusLabel(status: number) {
+  switch (status) {
+    case 0:
+      return "Finalizing upload";
+    case 1:
+      return "Upload received";
+    case 2:
+      return "Processing";
+    case 3:
+      return "Transcoding";
+    case 4:
+      return "Ready";
+    case 5:
+    case 6:
+      return "Bunny reported an error";
+    default:
+      return "Unknown Bunny state";
+  }
 }
 
 let localIdCounter = 0;
@@ -103,9 +130,13 @@ export default function NewChapterPage() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [uploadPct, setUploadPct] = useState(0);
   const [encodeProgress, setEncodeProgress] = useState(0);
-  const [uploadConfirmedAt, setUploadConfirmedAt] = useState<number | null>(null);
+  const [uploadConfirmedAt, setUploadConfirmedAt] = useState<number | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [chapterId, setChapterId] = useState<string | null>(null);
+  const [bunnyStatus, setBunnyStatus] = useState<BunnyStatus | null>(null);
+  const [lastBunnyCheckAt, setLastBunnyCheckAt] = useState<number | null>(null);
 
   const [sections, setSections] = useState<SectionDraft[]>([]);
   const [resources, setResources] = useState<ResourceDraft[]>([]);
@@ -115,14 +146,25 @@ export default function NewChapterPage() {
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const uploadRef = useRef<tus.Upload | null>(null);
+  const uploadedBytesRef = useRef(0);
   const playerRef = useRef<VideoPlayerHandle>(null);
   const previewWrapperRef = useRef<HTMLDivElement | null>(null);
 
-  const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
+  const previewUrl = useMemo(
+    () => (file ? URL.createObjectURL(file) : null),
+    [file],
+  );
   useEffect(() => {
     if (!previewUrl) return;
     return () => URL.revokeObjectURL(previewUrl);
   }, [previewUrl]);
+
+  useEffect(() => {
+    return () => {
+      void uploadRef.current?.abort(true);
+    };
+  }, []);
 
   const busy = phase === "creating" || phase === "uploading";
   const locked = busy || phase === "processing" || phase === "ready";
@@ -132,15 +174,25 @@ export default function NewChapterPage() {
   // chapter markers shown on the player.
   const orderedSections = useMemo(() => {
     return sections
-      .map((s) => ({ ...s, startSec: parseTimecode(s.start), endSec: parseTimecode(s.end) }))
+      .map((s) => ({
+        ...s,
+        startSec: parseTimecode(s.start),
+        endSec: parseTimecode(s.end),
+      }))
       .sort((a, b) => (a.startSec ?? Infinity) - (b.startSec ?? Infinity));
   }, [sections]);
 
   const chaptersForPlayer = useMemo<VideoChapter[]>(
     () =>
       orderedSections
-        .filter((s): s is typeof s & { startSec: number } => s.startSec !== null)
-        .map((s) => ({ id: s.id, title: s.title.trim() || "Untitled", start: s.startSec })),
+        .filter(
+          (s): s is typeof s & { startSec: number } => s.startSec !== null,
+        )
+        .map((s) => ({
+          id: s.id,
+          title: s.title.trim() || "Untitled",
+          start: s.startSec,
+        })),
     [orderedSections],
   );
 
@@ -178,6 +230,8 @@ export default function NewChapterPage() {
         const status: BunnyStatus = json?.data ?? json;
         if (cancelled) return;
 
+        setBunnyStatus(status);
+        setLastBunnyCheckAt(Date.now());
         setEncodeProgress(status.encodeProgress ?? 0);
 
         if (status.failed) {
@@ -190,9 +244,14 @@ export default function NewChapterPage() {
         // TUS upload. Wait for that handoff, but never show an endless fake
         // transcoding state if no bytes arrive.
         if (status.notUploaded) {
-          if (uploadConfirmedAt && Date.now() - uploadConfirmedAt > 5 * 60_000) {
+          if (
+            uploadConfirmedAt &&
+            Date.now() - uploadConfirmedAt > 5 * 60_000
+          ) {
             setPhase("error");
-            setError("Bunny did not finalize this upload after five minutes. Please retry the video upload.");
+            setError(
+              `TUS reported the upload finished, but Bunny still reports 0 stored bytes after five minutes (status ${status.status}). Bunny did not receive the video payload. Please cancel this upload and retry.`,
+            );
             return;
           }
           pollRef.current = setTimeout(poll, 3000);
@@ -266,49 +325,149 @@ export default function NewChapterPage() {
       const json = await res.json().catch(() => null);
 
       if (!res.ok) {
-        throw new Error(json?.error?.message ?? json?.message ?? "Couldn't create the chapter.");
+        throw new Error(
+          json?.error?.message ??
+            json?.message ??
+            "Couldn't create the chapter.",
+        );
       }
 
       const result: CreateChapterResult = json?.data ?? json;
       setChapterId(result.chapterId);
-      startUpload(file, result.chapterId);
+      startUpload(file, result.chapterId, result.uploadCredentials);
     } catch (err) {
       setPhase("error");
       setError(err instanceof Error ? err.message : "Something went wrong.");
     }
   }
 
-  function startUpload(selected: File, createdChapterId: string) {
+  // Uploads the video directly from the browser to Bunny Stream over TUS,
+  // using the short-lived signed credentials minted server-side for this
+  // exact videoId. This bypasses our own API route entirely, so there's no
+  // server-side body-size or execution-time ceiling on video length — the
+  // bytes never pass through our backend.
+  function startUpload(
+    selected: File,
+    createdChapterId: string,
+    uploadCredentials: UploadCredentials,
+  ) {
     setPhase("uploading");
     setUploadPct(0);
-    void (async () => {
-      try {
-        const videoForm = new FormData();
-        videoForm.set("file", selected);
-        const videoResponse = await fetch(`/api/chapters/${createdChapterId}/video`, { method: "POST", body: videoForm });
-        if (!videoResponse.ok) { const json = await videoResponse.json().catch(() => null); throw new Error(json?.error?.message ?? "Bunny video upload failed."); }
+    uploadedBytesRef.current = 0;
+
+    const upload = new tus.Upload(selected, {
+      endpoint: uploadCredentials.endpoint,
+      retryDelays: [0, 3000, 5000, 10000, 20000, 60000, 60000],
+      // Bunny's TUS endpoint reads these as literal request headers on the
+      // creation call — NOT as tus metadata (metadata gets base64-encoded
+      // into Upload-Metadata, which Bunny does not parse for auth). Header
+      // casing matters here.
+      headers: {
+        AuthorizationSignature: uploadCredentials.authorizationSignature,
+        AuthorizationExpire: String(uploadCredentials.authorizationExpire),
+        VideoId: uploadCredentials.videoId,
+        LibraryId: uploadCredentials.libraryId,
+      },
+      metadata: {
+        filetype: selected.type,
+        title: selected.name,
+      },
+      chunkSize: 50 * 1024 * 1024, // 50MB chunks
+      onError: (err) => {
+        setPhase("error");
+        setError(
+          err instanceof Error
+            ? `Bunny TUS upload failed: ${err.message}`
+            : "Video upload to Bunny failed.",
+        );
+      },
+      onProgress: (bytesUploaded, bytesTotal) => {
+        uploadedBytesRef.current = bytesUploaded;
+        setUploadPct(Math.round((bytesUploaded / bytesTotal) * 100));
+      },
+      onSuccess: () => {
         setUploadPct(100);
         setUploadConfirmedAt(Date.now());
-          if (sectionsPayload.length > 0) {
-            const sectionResponse = await fetch(`/api/chapters/${createdChapterId}/sections`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ sections: sectionsPayload.map(({ title, start, end, order }) => ({ title, startSeconds: start, endSeconds: end, order })) }),
-            });
-            if (!sectionResponse.ok) throw new Error("Video uploaded, but timestamps could not be saved.");
-          }
-          for (const resource of resources) {
-            const resourceForm = new FormData();
-            resourceForm.set("file", resource.file);
-            const resourceResponse = await fetch(`/api/chapters/${createdChapterId}/resources`, { method: "POST", body: resourceForm });
-            if (!resourceResponse.ok) throw new Error("Video uploaded, but a PDF could not be uploaded.");
-          }
-          setPhase("processing");
-      } catch (err) {
-        setPhase("error");
-        setError(err instanceof Error ? err.message : "Chapter setup could not be completed.");
+        void finishChapterSetup(createdChapterId);
+      },
+      onBeforeRequest(request) {
+        const method = request.getMethod();
+        if (method === "PATCH") {
+          console.info("Bunny TUS PATCH starting", {
+            videoId: uploadCredentials.videoId,
+            offset: uploadedBytesRef.current,
+            size: selected.size,
+          });
+        }
+      },
+      onAfterResponse(request, response) {
+        const method = request.getMethod();
+        if (method === "PATCH") {
+          console.info("Bunny TUS PATCH finished", {
+            videoId: uploadCredentials.videoId,
+            status: response.getStatus(),
+            offset: uploadedBytesRef.current,
+          });
+        }
+      },
+    });
+
+    uploadRef.current = upload;
+    // Every submit reserves a brand-new Bunny videoId, so there is never a
+    // previous TUS session that legitimately belongs to this upload. Always
+    // start fresh — resuming here previously caused tus-js-client to match
+    // a stale session from an earlier chapter's videoId (same file re-used
+    // while testing) and fire onSuccess without sending any bytes to the
+    // new video.
+    upload.start();
+  }
+
+  // Runs after Bunny has confirmed the video bytes were received: saves
+  // timestamps and uploads any attached PDFs, then moves into "processing"
+  // so the status poller above can watch for Bunny to finish transcoding.
+  async function finishChapterSetup(createdChapterId: string) {
+    try {
+      if (sectionsPayload.length > 0) {
+        const sectionResponse = await fetch(
+          `/api/chapters/${createdChapterId}/sections`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sections: sectionsPayload.map(({ title, start, end, order }) => ({
+                title,
+                startSeconds: start,
+                endSeconds: end,
+                order,
+              })),
+            }),
+          },
+        );
+        if (!sectionResponse.ok)
+          throw new Error("Video uploaded, but timestamps could not be saved.");
       }
-    })();
+      for (const resource of resources) {
+        const resourceForm = new FormData();
+        resourceForm.set("file", resource.file);
+        const resourceResponse = await fetch(
+          `/api/chapters/${createdChapterId}/resources`,
+          {
+            method: "POST",
+            body: resourceForm,
+          },
+        );
+        if (!resourceResponse.ok)
+          throw new Error("Video uploaded, but a PDF could not be uploaded.");
+      }
+      setPhase("processing");
+    } catch (err) {
+      setPhase("error");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Chapter setup could not be completed.",
+      );
+    }
   }
 
   // ---- Timestamps (VideoSection) ----
@@ -326,22 +485,33 @@ export default function NewChapterPage() {
         .map((s) => ({ ...s, startSec: parseTimecode(s.start) }))
         .sort((a, b) => (a.startSec ?? Infinity) - (b.startSec ?? Infinity));
 
-      const previous = [...parsed].reverse().find((s) => (s.startSec ?? Infinity) < current);
+      const previous = [...parsed]
+        .reverse()
+        .find((s) => (s.startSec ?? Infinity) < current);
       const next = parsed.find((s) => (s.startSec ?? -Infinity) > current);
 
       const withClosedGap = previous
-        ? prev.map((s) => (s.id === previous.id ? { ...s, end: currentLabel } : s))
+        ? prev.map((s) =>
+            s.id === previous.id ? { ...s, end: currentLabel } : s,
+          )
         : prev;
 
-      const fallbackEnd = formatTime(Math.min(current + 30, duration || current + 30));
+      const fallbackEnd = formatTime(
+        Math.min(current + 30, duration || current + 30),
+      );
       const end = next ? next.start : fallbackEnd;
 
-      return [...withClosedGap, { id: localId(), title: "", start: currentLabel, end }];
+      return [
+        ...withClosedGap,
+        { id: localId(), title: "", start: currentLabel, end },
+      ];
     });
   }
 
   function updateSection(id: string, patch: Partial<SectionDraft>) {
-    setSections((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+    setSections((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+    );
   }
 
   function removeSection(id: string) {
@@ -356,7 +526,10 @@ export default function NewChapterPage() {
   function jumpTo(seconds: number) {
     playerRef.current?.seekTo(seconds);
     playerRef.current?.play();
-    previewWrapperRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    previewWrapperRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
   }
 
   // ---- Attach files (ChapterResource) ----
@@ -370,7 +543,10 @@ export default function NewChapterPage() {
       return;
     }
     setResourceError(null);
-    setResources((prev) => [...prev, ...picked.map((f) => ({ id: localId(), file: f }))]);
+    setResources((prev) => [
+      ...prev,
+      ...picked.map((f) => ({ id: localId(), file: f })),
+    ]);
   }
 
   function removeResource(id: string) {
@@ -382,18 +558,26 @@ export default function NewChapterPage() {
       <div className="mb-2 flex items-center justify-between">
         <div>
           <p className="text-sm text-muted-foreground">New chapter</p>
-          <h1 className="text-2xl font-semibold tracking-tight">Add a chapter</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Add a chapter
+          </h1>
         </div>
-        <Button variant="ghost" onClick={() => router.push(`/courses/${courseId}`)}>
+        <Button
+          variant="ghost"
+          onClick={() => router.push(`/courses/${courseId}`)}
+        >
           Cancel
         </Button>
       </div>
       <p className="mb-8 text-sm text-muted-foreground">
-        Add your video first. Timestamps and files below are optional — add them now or come
-        back later.
+        Add your video first. Timestamps and files below are optional — add them
+        now or come back later.
       </p>
 
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+      <form
+        onSubmit={handleSubmit}
+        className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]"
+      >
         {/* Video — the hero of the page */}
         <div className="space-y-3">
           {!file ? (
@@ -414,8 +598,12 @@ export default function NewChapterPage() {
                   <UploadCloud className="h-6 w-6 text-muted-foreground" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Drag a video here, or click to browse</p>
-                  <p className="mt-1 text-xs text-muted-foreground">MP4, MOV, or MKV</p>
+                  <p className="text-sm font-medium">
+                    Drag a video here, or click to browse
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    MP4, MOV, or MKV
+                  </p>
                 </div>
                 <input
                   type="file"
@@ -450,19 +638,30 @@ export default function NewChapterPage() {
               {/* Upload / processing status — a compact badge so it doesn't
                   fight with the player's own controls. */}
               {(phase === "creating" || phase === "uploading") && (
-                <Badge className="absolute right-3 top-3 z-10 gap-1.5" variant="secondary">
+                <Badge
+                  className="absolute right-3 top-3 z-10 gap-1.5"
+                  variant="secondary"
+                >
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  {phase === "creating" ? "Creating chapter…" : `Uploading… ${uploadPct}%`}
+                  {phase === "creating"
+                    ? "Creating chapter…"
+                    : `Uploading… ${uploadPct}%`}
                 </Badge>
               )}
               {phase === "processing" && (
-                <Badge className="absolute right-3 top-3 z-10 gap-1.5" variant="secondary">
+                <Badge
+                  className="absolute right-3 top-3 z-10 gap-1.5"
+                  variant="secondary"
+                >
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   Processing… {encodeProgress}%
                 </Badge>
               )}
               {phase === "ready" && (
-                <Badge className="absolute right-3 top-3 z-10 gap-1.5" variant="secondary">
+                <Badge
+                  className="absolute right-3 top-3 z-10 gap-1.5"
+                  variant="secondary"
+                >
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   Ready to watch
                 </Badge>
@@ -475,7 +674,9 @@ export default function NewChapterPage() {
         <Card className="h-fit">
           <CardHeader>
             <CardTitle className="text-base">Chapter details</CardTitle>
-            <CardDescription>This appears in the course outline students see.</CardDescription>
+            <CardDescription>
+              This appears in the course outline students see.
+            </CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-4">
@@ -529,15 +730,37 @@ export default function NewChapterPage() {
 
           <CardFooter className="flex-col items-stretch gap-2 border-none pt-0">
             {phase === "processing" && (
-              <p className="text-center text-xs text-muted-foreground">
-                {encodeProgress === 0
-                  ? "Bunny is finalizing the upload before transcoding begins."
-                  : `Transcoding ${encodeProgress}% — this can take a few minutes depending on video length.`}
-              </p>
+              <div className="space-y-1 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                <p>
+                  Bunny:{" "}
+                  {bunnyStatus
+                    ? bunnyStatusLabel(bunnyStatus.status)
+                    : "Waiting for status"}
+                  {bunnyStatus && ` (code ${bunnyStatus.status})`}
+                </p>
+                <p>
+                  Encoding: {encodeProgress}% · Stored:{" "}
+                  {formatBytes(bunnyStatus?.storageSize ?? 0)}
+                </p>
+                <p>
+                  {bunnyStatus?.message ??
+                    "Waiting for Bunny's first status response."}
+                </p>
+                <p>
+                  Last checked:{" "}
+                  {lastBunnyCheckAt
+                    ? new Date(lastBunnyCheckAt).toLocaleTimeString()
+                    : "not checked yet"}
+                </p>
+                <p className="break-all">Video ID: {chapterId}</p>
+              </div>
             )}
 
             {phase === "ready" ? (
-              <Button type="button" onClick={() => router.push(`/courses/${courseId}`)}>
+              <Button
+                type="button"
+                onClick={() => router.push(`/courses/${courseId}`)}
+              >
                 Back to course
               </Button>
             ) : (
@@ -562,17 +785,25 @@ export default function NewChapterPage() {
             <div>
               <CardTitle className="text-base">
                 Timestamps{" "}
-                <span className="font-normal text-muted-foreground">(optional)</span>
+                <span className="font-normal text-muted-foreground">
+                  (optional)
+                </span>
               </CardTitle>
               <CardDescription>
                 Mark key moments so students can jump straight to them — like
-                &ldquo;Introduction&rdquo; or &ldquo;Worked example&rdquo;. They stay sorted by
-                start time automatically.
+                &ldquo;Introduction&rdquo; or &ldquo;Worked example&rdquo;. They
+                stay sorted by start time automatically.
                 {duration > 0 && ` Video length: ${formatTime(duration)}.`}
               </CardDescription>
             </div>
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={addSection} disabled={!file}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addSection}
+            disabled={!file}
+          >
             <Plus className="mr-1.5 h-4 w-4" />
             Add timestamp
           </Button>
@@ -582,14 +813,17 @@ export default function NewChapterPage() {
           <CardContent className="space-y-3">
             {orderedSections.map((section, index) => {
               const { startSec, endSec } = section;
-              const invalidRange = startSec !== null && endSec !== null && endSec <= startSec;
+              const invalidRange =
+                startSec !== null && endSec !== null && endSec <= startSec;
               const beyondLength =
                 duration > 0 &&
                 ((startSec !== null && startSec > duration) ||
                   (endSec !== null && endSec > duration));
               const previous = orderedSections[index - 1];
               const overlapsPrevious =
-                previous?.endSec != null && startSec !== null && startSec < previous.endSec;
+                previous?.endSec != null &&
+                startSec !== null &&
+                startSec < previous.endSec;
               const isActive = section.id === activeSectionId;
 
               return (
@@ -602,18 +836,24 @@ export default function NewChapterPage() {
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                     <div className="flex-1 space-y-1.5">
-                      <Label htmlFor={`section-title-${section.id}`}>What happens here</Label>
+                      <Label htmlFor={`section-title-${section.id}`}>
+                        What happens here
+                      </Label>
                       <Input
                         id={`section-title-${section.id}`}
                         placeholder="e.g. Introduction"
                         value={section.title}
-                        onChange={(e) => updateSection(section.id, { title: e.target.value })}
+                        onChange={(e) =>
+                          updateSection(section.id, { title: e.target.value })
+                        }
                       />
                     </div>
 
                     <div className="flex gap-2">
                       <div className="space-y-1.5">
-                        <Label htmlFor={`section-start-${section.id}`}>Starts at</Label>
+                        <Label htmlFor={`section-start-${section.id}`}>
+                          Starts at
+                        </Label>
                         <div className="flex gap-1.5">
                           <Input
                             id={`section-start-${section.id}`}
@@ -621,7 +861,9 @@ export default function NewChapterPage() {
                             placeholder="0:00"
                             value={section.start}
                             onChange={(e) =>
-                              updateSection(section.id, { start: e.target.value })
+                              updateSection(section.id, {
+                                start: e.target.value,
+                              })
                             }
                           />
                           <Button
@@ -629,7 +871,9 @@ export default function NewChapterPage() {
                             variant="secondary"
                             size="sm"
                             title="Use where the video is currently paused"
-                            onClick={() => setTimestampFromPlayer(section.id, "start")}
+                            onClick={() =>
+                              setTimestampFromPlayer(section.id, "start")
+                            }
                           >
                             Use current
                           </Button>
@@ -637,21 +881,27 @@ export default function NewChapterPage() {
                       </div>
 
                       <div className="space-y-1.5">
-                        <Label htmlFor={`section-end-${section.id}`}>Ends at</Label>
+                        <Label htmlFor={`section-end-${section.id}`}>
+                          Ends at
+                        </Label>
                         <div className="flex gap-1.5">
                           <Input
                             id={`section-end-${section.id}`}
                             className="w-20"
                             placeholder="0:30"
                             value={section.end}
-                            onChange={(e) => updateSection(section.id, { end: e.target.value })}
+                            onChange={(e) =>
+                              updateSection(section.id, { end: e.target.value })
+                            }
                           />
                           <Button
                             type="button"
                             variant="secondary"
                             size="sm"
                             title="Use where the video is currently paused"
-                            onClick={() => setTimestampFromPlayer(section.id, "end")}
+                            onClick={() =>
+                              setTimestampFromPlayer(section.id, "end")
+                            }
                           >
                             Use current
                           </Button>
@@ -695,7 +945,8 @@ export default function NewChapterPage() {
                   )}
                   {!invalidRange && beyondLength && (
                     <p className="mt-2 text-xs text-destructive">
-                      This is beyond the video&apos;s length ({formatTime(duration)}).
+                      This is beyond the video&apos;s length (
+                      {formatTime(duration)}).
                     </p>
                   )}
                 </div>
@@ -707,9 +958,10 @@ export default function NewChapterPage() {
         {orderedSections.length === 0 && (
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              No timestamps yet. Tip: play the video above, pause where a new topic starts, then
-              click &ldquo;Add timestamp&rdquo; — it picks up the paused time and closes the gap
-              with the previous one automatically.
+              No timestamps yet. Tip: play the video above, pause where a new
+              topic starts, then click &ldquo;Add timestamp&rdquo; — it picks up
+              the paused time and closes the gap with the previous one
+              automatically.
             </p>
           </CardContent>
         )}
@@ -725,26 +977,29 @@ export default function NewChapterPage() {
             <div>
               <CardTitle className="text-base">
                 Attach files{" "}
-                <span className="font-normal text-muted-foreground">(optional)</span>
+                <span className="font-normal text-muted-foreground">
+                  (optional)
+                </span>
               </CardTitle>
               <CardDescription>
-                Add slides, a worksheet, or notes as a PDF students can download.
+                Add slides, a worksheet, or notes as a PDF students can
+                download.
               </CardDescription>
             </div>
           </div>
-          <Button type="button" variant="outline" size="sm" >
-              <Plus className="mr-1.5 h-4 w-4" />
-              Add PDF
-              <input
-                type="file"
-                accept="application/pdf"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  addResources(e.target.files);
-                  e.target.value = "";
-                }}
-              />
+          <Button type="button" variant="outline" size="sm">
+            <Plus className="mr-1.5 h-4 w-4" />
+            Add PDF
+            <input
+              type="file"
+              accept="application/pdf"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                addResources(e.target.files);
+                e.target.value = "";
+              }}
+            />
           </Button>
         </CardHeader>
 
@@ -756,14 +1011,21 @@ export default function NewChapterPage() {
           )}
 
           {resources.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No files attached yet.</p>
+            <p className="text-sm text-muted-foreground">
+              No files attached yet.
+            </p>
           ) : (
             <ul className="space-y-2">
               {resources.map((resource) => (
-                <li key={resource.id} className="flex items-center gap-3 rounded-lg border p-3">
+                <li
+                  key={resource.id}
+                  className="flex items-center gap-3 rounded-lg border p-3"
+                >
                   <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{resource.file.name}</p>
+                    <p className="truncate text-sm font-medium">
+                      {resource.file.name}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       {formatBytes(resource.file.size)}
                     </p>

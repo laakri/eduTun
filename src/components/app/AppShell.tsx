@@ -7,12 +7,10 @@ import { usePathname } from "next/navigation";
 import {
   BookOpen,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   LayoutDashboard,
   Menu,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Search,
   Settings,
   Users,
   X,
@@ -20,7 +18,13 @@ import {
 
 import { cn } from "@/lib/utils";
 
-type Page = { label: string; href: string; children?: Page[]; adminOnly?: boolean };
+type Page = {
+  label: string;
+  href: string;
+  children?: Page[];
+  adminOnly?: boolean;
+};
+
 type Section = {
   label: string;
   href: string;
@@ -49,12 +53,25 @@ const sections: Section[] = [
         label: "Categories",
         href: "/courses/categories",
         children: [
-          { label: "Baccalauréat", href: "/courses/categories/bac" },
-          { label: "Languages", href: "/courses/categories/languages" },
+          {
+            label: "Baccalauréat",
+            href: "/courses/categories/bac",
+          },
+          {
+            label: "Languages",
+            href: "/courses/categories/languages",
+          },
         ],
       },
-      { label: "New course", href: "/courses/new" },
-      { label: "Professor applications", href: "/admin/professor-applications", adminOnly: true },
+      {
+        label: "New course",
+        href: "/courses/new",
+      },
+      {
+        label: "Professor applications",
+        href: "/admin/professor-applications",
+        adminOnly: true,
+      },
     ],
   },
   {
@@ -77,20 +94,6 @@ const sections: Section[] = [
   },
 ];
 
-function Mark() {
-  return (
-    <svg viewBox="0 0 32 32" className="size-4 shrink-0 text-sidebar-primary" fill="none">
-      <path
-        d="M16 8 C11 5 6 5 3 7 V24 C6 22 11 22 16 25 C21 22 26 22 29 24 V7 C26 5 21 5 16 8 Z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
-      <path d="M16 8 V25" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 export function AppShell({
   children,
   user,
@@ -103,16 +106,18 @@ export function AppShell({
   };
 }) {
   const pathname = usePathname();
+
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const activeSection = (() => {
-    const found = sections.find((s) => pathname?.startsWith(s.href));
+    const found = sections.find((section) =>
+      pathname?.startsWith(section.href),
+    );
+
     return found ?? sections[0]!;
   })();
-
-  const initials = (user?.name ?? user?.email ?? "?").trim().charAt(0).toUpperCase();
 
   function SidebarPages({ collapsed }: { collapsed: boolean }) {
     return (
@@ -124,74 +129,77 @@ export function AppShell({
           </div>
         )}
 
-        {activeSection.pages.filter((page) => !page.adminOnly || user?.roles?.includes("admin")).map((page) => {
-          const active = pathname === page.href;
-          const isOpen = expanded === page.href;
+        {activeSection.pages
+          .filter((page) => !page.adminOnly || user?.roles?.includes("admin"))
+          .map((page) => {
+            const active = pathname === page.href;
+            const isOpen = expanded === page.href;
 
-          if (page.children) {
-            if (collapsed) return null; // nested groups need labels, skip in rail mode
+            if (page.children) {
+              if (collapsed) return null;
+
+              return (
+                <div key={page.href}>
+                  <button
+                    type="button"
+                    onClick={() => setExpanded(isOpen ? null : page.href)}
+                    className={cn(
+                      "flex w-full items-center justify-between rounded-sm px-2.5 py-[7px] text-[13px] transition-colors",
+                      "hover:bg-sidebar-accent",
+                      isOpen
+                        ? "text-sidebar-foreground"
+                        : "text-sidebar-foreground/60",
+                    )}
+                  >
+                    {page.label}
+
+                    {isOpen ? (
+                      <ChevronDown className="size-3.5" />
+                    ) : (
+                      <ChevronRight className="size-3.5" />
+                    )}
+                  </button>
+
+                  {isOpen && (
+                    <div className="ml-2.5 flex flex-col gap-0.5 border-l border-sidebar-border pl-2.5">
+                      {page.children.map((child) => (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          onClick={() => setMobileOpen(false)}
+                          className={cn(
+                            "rounded-sm px-2 py-[6px] text-[13px] transition-colors",
+                            "hover:bg-sidebar-accent",
+                            pathname === child.href
+                              ? "text-sidebar-primary"
+                              : "text-sidebar-foreground/60",
+                          )}
+                        >
+                          {child.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
             return (
-              <div key={page.href}>
-                <button
-                  type="button"
-                  onClick={() => setExpanded(isOpen ? null : page.href)}
-                  className={cn(
-                    "flex w-full items-center justify-between rounded-sm px-2.5 py-[7px] text-[13px] transition-colors hover:bg-sidebar-accent",
-                    isOpen ? "text-sidebar-foreground" : "text-sidebar-foreground/60",
-                  )}
-                >
-                  {page.label}
-                  {isOpen ? (
-                    <ChevronDown className="size-3.5" />
-                  ) : (
-                    <ChevronRight className="size-3.5" />
-                  )}
-                </button>
-
-                {isOpen && (
-                  <div className="ml-2.5 flex flex-col gap-0.5 border-l border-sidebar-border pl-2.5">
-                    {page.children.map((child) => (
-                      <Link
-                        key={child.href}
-                        href={child.href}
-                        onClick={() => setMobileOpen(false)}
-                        className={cn(
-                          "rounded-sm px-2 py-[6px] text-[13px] transition-colors hover:bg-sidebar-accent",
-                          pathname === child.href
-                            ? "text-sidebar-primary"
-                            : "text-sidebar-foreground/60",
-                        )}
-                      >
-                        {child.label}
-                      </Link>
-                    ))}
-                  </div>
+              <Link
+                key={page.href}
+                href={page.href}
+                onClick={() => setMobileOpen(false)}
+                className={cn(
+                  "flex items-center rounded-sm px-2.5 py-[7px] text-[13px] transition-colors",
+                  active
+                    ? "bg-sidebar-accent text-sidebar-primary"
+                    : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground",
                 )}
-              </div>
+              >
+                {page.label}
+              </Link>
             );
-          }
-
-          const Icon = activeSection.icon;
-
-          return (
-            <Link
-              key={page.href}
-              href={page.href}
-              onClick={() => setMobileOpen(false)}
-              title={collapsed ? page.label : undefined}
-              className={cn(
-                "flex items-center gap-2.5 rounded-sm px-2.5 py-[7px] text-[13px] transition-colors",
-                collapsed && "justify-center px-0",
-                active
-                  ? "bg-sidebar-accent text-sidebar-primary"
-                  : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground",
-              )}
-            >
-              {collapsed && <Icon className="size-[15px]" />}
-              {!collapsed && page.label}
-            </Link>
-          );
-        })}
+          })}
       </div>
     );
   }
@@ -200,6 +208,7 @@ export function AppShell({
     <div className="flex h-svh w-full flex-col overflow-hidden bg-background text-foreground">
       {/* Top bar */}
       <header className="flex h-12 shrink-0 items-center gap-1 border-b border-sidebar-border bg-sidebar px-2 sm:gap-4 sm:px-4">
+        {/* Mobile menu */}
         <button
           type="button"
           aria-label="Open menu"
@@ -209,40 +218,26 @@ export function AppShell({
           <Menu className="size-[19px]" />
         </button>
 
-        <button
-          type="button"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          onClick={() => setCollapsed((v) => !v)}
-          className="hidden shrink-0 rounded-sm p-1 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground md:inline-flex"
-        >
-          {collapsed ? (
-            <PanelLeftOpen className="size-[17px]" />
-          ) : (
-            <PanelLeftClose className="size-[17px]" />
-          )}
-        </button>
+        {/* Desktop navigation */}
+        <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {sections.map((section) => {
+            const active = section.href === activeSection.href;
 
-        <Link href="/dashboard" className="flex shrink-0 items-center gap-2 pr-2">
-          <Mark />
-          <span className="text-[15px] tracking-tight text-sidebar-foreground">EduTun</span>
-        </Link>
-
-        <nav
-          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        >
-          {sections.map((s) => {
-            const active = s.href === activeSection.href;
             return (
               <Link
-                key={s.href}
-                href={s.href}
+                key={section.href}
+                href={section.href}
                 className={cn(
                   "relative flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 py-3.5 text-[13px] transition-colors sm:px-3",
-                  active ? "text-sidebar-primary" : "text-sidebar-foreground/60 hover:text-sidebar-foreground",
+                  active
+                    ? "text-sidebar-primary"
+                    : "text-sidebar-foreground/60 hover:text-sidebar-foreground",
                 )}
               >
-                <s.icon className="size-[14px]" />
-                <span className="hidden sm:inline">{s.label}</span>
+                <section.icon className="size-[14px]" />
+
+                <span className="hidden sm:inline">{section.label}</span>
+
                 <span
                   className={cn(
                     "absolute inset-x-2.5 -bottom-px h-[2px] rounded-full bg-sidebar-primary transition-opacity sm:inset-x-3",
@@ -253,23 +248,10 @@ export function AppShell({
             );
           })}
         </nav>
-
-        <div className="ml-auto flex shrink-0 items-center gap-3">
-          <button
-            type="button"
-            aria-label="Search"
-            className="rounded-sm p-1 text-sidebar-foreground/60 hover:text-sidebar-foreground"
-          >
-            <Search className="size-4" />
-          </button>
-          <div className="flex size-7 items-center justify-center rounded-full bg-sidebar-accent text-[11px] font-medium text-sidebar-accent-foreground">
-            {initials}
-          </div>
-        </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {/* Mobile sidebar */}
+        {/* Mobile overlay */}
         <div
           className={cn(
             "fixed inset-0 z-40 bg-black/40 transition-opacity duration-200 md:hidden",
@@ -277,14 +259,17 @@ export function AppShell({
           )}
           onClick={() => setMobileOpen(false)}
         />
+
+        {/* Mobile sidebar */}
         <aside
           className={cn(
-            "fixed inset-y-0 left-0 z-50 flex w-64 flex-col  px-3 py-4 transition-transform duration-200 ease-out md:hidden",
+            "fixed inset-y-0 left-0 z-50 flex w-64 flex-col px-3 py-4 transition-transform duration-200 ease-out md:hidden",
             mobileOpen ? "translate-x-0" : "-translate-x-full",
           )}
         >
           <div className="mb-4 flex items-center justify-between px-2">
             <span className="text-[13px] text-sidebar-foreground/60">Menu</span>
+
             <button
               type="button"
               aria-label="Close menu"
@@ -294,21 +279,74 @@ export function AppShell({
               <X className="size-[16px]" />
             </button>
           </div>
+
           <SidebarPages collapsed={false} />
         </aside>
 
         {/* Desktop sidebar */}
+        {/* Desktop sidebar */}
         <aside
           className={cn(
-            "hidden shrink-0 flex-col overflow-y-auto border-r border-sidebar-border  py-4 transition-[width] duration-200 ease-out md:flex",
-            collapsed ? "w-14 items-center px-2" : "w-60 px-3",
+            "relative hidden shrink-0 flex-col overflow-visible border-r border-sidebar-border py-4 transition-[width] duration-200 ease-out md:flex",
+            collapsed ? "w-12 items-center px-0" : "w-60 px-3",
           )}
         >
-          <SidebarPages collapsed={collapsed} />
+          {/* Scrollable sidebar content */}
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {!collapsed && <SidebarPages collapsed={false} />}
+          </div>
+
+          {/* Collapsed rail */}
+          {collapsed && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <button
+                type="button"
+                onClick={() => setCollapsed(false)}
+                aria-label="Expand sidebar"
+                title="Expand sidebar"
+                className={cn(
+                  "flex size-8 items-center justify-center rounded-md",
+                  "text-sidebar-foreground/50",
+                  "transition-colors duration-150",
+                  "hover:bg-sidebar-accent",
+                  "hover:text-sidebar-foreground",
+                )}
+              >
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Collapse button */}
+          {!collapsed && (
+            <button
+              type="button"
+              onClick={() => setCollapsed(true)}
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar"
+              className={cn(
+                "absolute right-[-10px] top-1/2 z-50",
+                "-translate-y-1/2",
+                "flex size-5 items-center justify-center",
+                "rounded-full",
+                "border border-sidebar-border",
+                "bg-sidebar",
+                "text-sidebar-foreground/50",
+                "shadow-sm",
+                "transition-colors duration-150",
+                "hover:bg-sidebar-accent",
+                "hover:text-sidebar-foreground",
+              )}
+            >
+              <ChevronLeft className="size-3" />
+            </button>
+          )}
         </aside>
 
         {/* Content */}
-        <main className="min-w-0 flex-1 overflow-y-auto px-6 py-6">{children}</main>
+        <main className="min-w-0 flex-1 overflow-y-auto px-6 py-6">
+          {children}
+        </main>
       </div>
     </div>
   );

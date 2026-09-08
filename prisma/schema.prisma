@@ -10,6 +10,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+
 // ------------------------------------------------------------
 // AUTH TABLES (NextAuth / Auth.js)
 // Not written to under the current JWT session strategy, but
@@ -177,7 +178,8 @@ model Chapter {
   durationSeconds Int?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
-
+  ready Boolean @default(false)
+  
   course    Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
   progress  VideoProgress[]
   quiz      Quiz?
