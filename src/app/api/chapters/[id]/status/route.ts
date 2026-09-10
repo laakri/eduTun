@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { VideoStatus } from "@prisma/client";
 import { ok, withErrorHandler } from "@/lib/api-response";
 import { assertCanEditCourse } from "@/core/auth.service";
 import { NotFoundError } from "@/lib/errors";
@@ -17,18 +18,29 @@ export const GET = withErrorHandler(
     await assertCanEditCourse(chapter.course);
 
     const status = await getBunnyVideoStatus(chapter.videoId);
+    const videoStatus = status.failed
+      ? VideoStatus.FAILED
+      : status.ready
+        ? VideoStatus.READY
+        : VideoStatus.PROCESSING;
 
-    if (
-      status.ready &&
-      status.durationSeconds &&
-      chapter.durationSeconds !== status.durationSeconds
-    ) {
-      await db.chapter.update({
-        where: { id },
-        data: { durationSeconds: status.durationSeconds, ready: true },
-      });
-    }
+    await db.chapter.update({
+      where: { id },
+      data: {
+        videoStatus,
+        ready: videoStatus === VideoStatus.READY,
+        ...(status.durationSeconds
+          ? { durationSeconds: status.durationSeconds }
+          : {}),
+      },
+    });
 
-    return ok(status);
+    return ok({
+      ...status,
+      id: chapter.id,
+      bunnyVideoId: chapter.videoId,
+      videoStatus,
+      progress: status.ready ? 100 : status.encodeProgress,
+    });
   },
 );

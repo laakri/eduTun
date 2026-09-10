@@ -1,9 +1,10 @@
 import { z } from "zod";
+import { VideoStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { ok, withErrorHandler } from "@/lib/api-response";
 import { parseBody } from "@/lib/parse-body";
 import { assertCanEditCourse, requireCourseManager } from "@/core/auth.service";
-import { NotFoundError } from "@/lib/errors";
+import { NotFoundError, ValidationError } from "@/lib/errors";
 import {
   getBunnyCdnUrl,
   getBunnyEmbedUrl,
@@ -83,6 +84,26 @@ export const PATCH = withErrorHandler(
     await assertCanEditCourse(existing);
 
     const body = await parseBody(req, updateCourseSchema);
+
+    if (body.published === true) {
+      const chapters = await db.chapter.findMany({
+        where: { courseId: id },
+        select: { title: true, videoStatus: true },
+      });
+      if (chapters.length === 0) {
+        throw new NotFoundError("Chapter");
+      }
+      const blockedChapter = chapters.find(
+        (chapter) => chapter.videoStatus !== VideoStatus.READY,
+      );
+      if (blockedChapter) {
+        throw new ValidationError(
+          blockedChapter.videoStatus === VideoStatus.FAILED
+            ? `Video processing failed for "${blockedChapter.title}".`
+            : `Video "${blockedChapter.title}" is still being processed.`,
+        );
+      }
+    }
 
     const course = await db.$transaction(async (tx) => {
       if (body.categoryIds) {

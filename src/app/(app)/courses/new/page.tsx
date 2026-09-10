@@ -21,9 +21,9 @@ function extractErrorMessage(body: unknown, res: Response): string {
     if (
       b.error &&
       typeof b.error === "object" &&
-      typeof (b.error as any).message === "string"
+      typeof (b.error as Record<string, unknown>).message === "string"
     ) {
-      return (b.error as any).message;
+      return (b.error as Record<string, unknown>).message as string;
     }
 
     if (Array.isArray(b.errors) && b.errors.length > 0) {
@@ -32,9 +32,9 @@ function extractErrorMessage(body: unknown, res: Response): string {
       if (
         first &&
         typeof first === "object" &&
-        typeof (first as any).message === "string"
+        typeof (first as Record<string, unknown>).message === "string"
       ) {
-        return (first as any).message;
+        return (first as Record<string, unknown>).message as string;
       }
     }
   }
@@ -47,6 +47,7 @@ type CategoryOption = {
   name: string;
   slug: string;
   parentId: string | null;
+  children?: CategoryOption[];
 };
 
 const DESCRIPTION_LIMIT = 400;
@@ -57,6 +58,7 @@ export default function NewCoursePage() {
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [parentCategoryId, setParentCategoryId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [tagsInput, setTagsInput] = useState("");
 
@@ -96,7 +98,7 @@ export default function NewCoursePage() {
         let body: unknown;
         try {
           body = raw ? JSON.parse(raw) : null;
-        } catch (parseErr) {
+        } catch {
           console.error("GET /api/categories returned non-JSON body:", raw);
           if (!cancelled)
             setCategoriesError("Categories response wasn't valid JSON.");
@@ -104,13 +106,13 @@ export default function NewCoursePage() {
         }
 
         // Tolerate either a bare array or a wrapped `{ categories: [...] }` shape.
-        const data: CategoryOption[] = Array.isArray(body)
-          ? body
-          : Array.isArray((body as any)?.categories)
-            ? (body as any).categories
-            : Array.isArray((body as any)?.data)
-              ? (body as any).data
-              : [];
+        const response = body as
+          | CategoryOption[]
+          | { categories?: CategoryOption[]; data?: CategoryOption[] }
+          | null;
+        const data: CategoryOption[] = Array.isArray(response)
+          ? response
+          : (response?.categories ?? response?.data ?? []);
 
         if (data.length === 0) {
           console.warn(
@@ -138,6 +140,20 @@ export default function NewCoursePage() {
       cancelled = true;
     };
   }, []);
+
+  const selectedParentCategory = categories.find(
+    (category) => category.id === parentCategoryId,
+  );
+  const subjectCategories = selectedParentCategory
+    ? selectedParentCategory.children?.length
+      ? selectedParentCategory.children
+      : [selectedParentCategory]
+    : [];
+
+  function handleParentCategoryChange(value: string) {
+    setParentCategoryId(value);
+    setCategoryId("");
+  }
 
   function readCoverFile(file: File | undefined) {
     if (!file || !file.type.startsWith("image/")) return;
@@ -168,6 +184,11 @@ export default function NewCoursePage() {
       return;
     }
 
+    if (!parentCategoryId || !categoryId) {
+      setError("Choose a program and a specific subject before continuing.");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 
@@ -183,7 +204,7 @@ export default function NewCoursePage() {
         body: JSON.stringify({
           title: title.trim(),
           description: description.trim() || null,
-          categoryId: categoryId || null,
+          categoryId,
           tags,
         }),
       });
@@ -283,11 +304,11 @@ export default function NewCoursePage() {
 
       <div className="mb-8">
         <h1 className="text-2xl font-medium text-foreground">
-          Let's set up your course
+          Let&apos;s set up your course
         </h1>
         <p className="mt-1 text-[13px] text-muted-foreground">
-          Add the basics now — you can refine everything later, and you'll add
-          chapters next.
+          Add the basics now — you can refine everything later, and you&apos;ll
+          add chapters next.
         </p>
       </div>
 
@@ -418,11 +439,11 @@ export default function NewCoursePage() {
               </label>
               <select
                 id="category"
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
+                value={parentCategoryId}
+                onChange={(e) => handleParentCategoryChange(e.target.value)}
                 className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-[14px] text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-ring/30"
               >
-                <option value="">No category</option>
+                <option value="">Choose a program</option>
                 {categories.map((cat) => (
                   <option key={cat.id} value={cat.id}>
                     {cat.name}
@@ -434,6 +455,38 @@ export default function NewCoursePage() {
                   {categoriesError}
                 </p>
               )}
+            </div>
+
+            <div>
+              <label
+                htmlFor="subject"
+                className="mb-2 block text-[13px] text-foreground/70"
+              >
+                Subject
+              </label>
+              <select
+                id="subject"
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value)}
+                disabled={!parentCategoryId || subjectCategories.length === 0}
+                className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-[14px] text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <option value="">
+                  {parentCategoryId
+                    ? subjectCategories.length > 0
+                      ? "Choose a subject"
+                      : "No subjects available"
+                    : "Choose a program first"}
+                </option>
+                {subjectCategories.map((subject) => (
+                  <option key={subject.id} value={subject.id}>
+                    {subject.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-muted-foreground/70">
+                Choose the specific subject this course teaches.
+              </p>
             </div>
 
             <div>

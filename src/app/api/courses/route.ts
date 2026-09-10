@@ -5,25 +5,35 @@ import { parseBody } from "@/lib/parse-body";
 import { requireCourseManager, requireUser } from "@/core/auth.service";
 import { canManageCourses } from "@/core/permissions";
 import { getBunnyCdnUrl } from "@/lib/bunny";
+import { ValidationError } from "@/lib/errors";
 
 const createCourseSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
-  categoryId: z.string().cuid().optional().nullable(),
+  categoryId: z.string().cuid(),
 });
 
 export const POST = withErrorHandler(async (req) => {
   const user = await requireCourseManager();
   const body = await parseBody(req, createCourseSchema);
+  const category = await db.category.findUnique({
+    where: { id: body.categoryId },
+    select: { id: true, parentId: true, children: { select: { id: true } } },
+  });
+
+  if (!category) throw new ValidationError("Choose a valid subject.");
+  if (category.children.length > 0) {
+    throw new ValidationError(
+      "Choose a specific subject, not a parent program.",
+    );
+  }
 
   const course = await db.course.create({
     data: {
       title: body.title,
       description: body.description ?? null,
       profId: user.id,
-      ...(body.categoryId
-        ? { categories: { create: [{ categoryId: body.categoryId }] } }
-        : {}),
+      categories: { create: [{ categoryId: body.categoryId }] },
     },
     include: {
       categories: { include: { category: true } },

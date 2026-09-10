@@ -106,17 +106,130 @@ async function main() {
       create: { ...category, parentId: bac.id },
     });
   }
-  const bacPack = await db.pack.upsert({
-    where: { slug: "bac-2027-foundation" },
-    update: {},
-    create: {
-      slug: "bac-2027-foundation",
-      name: "Baccalauréat Foundation Pack",
-      description: "A complete starting pack for the Tunisian Baccalauréat.",
-      priceCents: 0,
-      items: { create: { categoryId: bac.id } },
-    },
+  async function upsertPack(input: {
+    slug: string;
+    name: string;
+    description: string;
+    priceCents: number;
+    categoryIds: string[];
+  }) {
+    const pack = await db.pack.upsert({
+      where: { slug: input.slug },
+      update: {
+        name: input.name,
+        description: input.description,
+        priceCents: input.priceCents,
+      },
+      create: {
+        slug: input.slug,
+        name: input.name,
+        description: input.description,
+        priceCents: input.priceCents,
+      },
+    });
+
+    await db.packItem.deleteMany({ where: { packId: pack.id } });
+    await db.packItem.createMany({
+      data: input.categoryIds.map((categoryId) => ({
+        packId: pack.id,
+        categoryId,
+      })),
+    });
+
+    return pack;
+  }
+
+  const bacPack = await upsertPack({
+    slug: "bac-2027-complete",
+    name: "Baccalauréat 2027 — Complete",
+    description: "All Bac subjects in one complete study pack.",
+    priceCents: 14900,
+    categoryIds: [bac.id],
   });
+
+  const bacInfo = await db.category.findUniqueOrThrow({
+    where: { slug: "bac-info" },
+  });
+  const bacMaths = await db.category.findUniqueOrThrow({
+    where: { slug: "bac-maths" },
+  });
+  const bacSciences = await db.category.findUniqueOrThrow({
+    where: { slug: "bac-sciences" },
+  });
+  const bacPhysique = await db.category.findUniqueOrThrow({
+    where: { slug: "bac-physique" },
+  });
+
+  const professor = await db.user.findUniqueOrThrow({
+    where: { email: profEmail },
+  });
+  const demoCourseTitle = "Bac Mathématiques — Fonctions";
+  let demoCourse = await db.course.findFirst({
+    where: { title: demoCourseTitle, profId: professor.id },
+  });
+  if (!demoCourse) {
+    demoCourse = await db.course.create({
+      data: {
+        title: demoCourseTitle,
+        description:
+          "Un cours de démonstration inclus dans le pack Bac complet.",
+        profId: professor.id,
+        published: true,
+        categories: { create: [{ categoryId: bacMaths.id }] },
+        chapters: {
+          create: {
+            title: "Introduction aux fonctions",
+            order: 1,
+            videoProvider: "bunny",
+            videoId: "00000000-0000-0000-0000-000000000001",
+            videoStatus: "PROCESSING",
+            ready: false,
+          },
+        },
+      },
+    });
+  }
+
+  await upsertPack({
+    slug: "bac-2027-informatique",
+    name: "Bac 2027 — Informatique",
+    description: "Focused preparation for the Informatique section.",
+    priceCents: 4900,
+    categoryIds: [bacInfo.id],
+  });
+
+  await upsertPack({
+    slug: "bac-2027-mathematiques",
+    name: "Bac 2027 — Mathématiques",
+    description: "Focused preparation for the Mathématiques section.",
+    priceCents: 4900,
+    categoryIds: [bacMaths.id],
+  });
+
+  await upsertPack({
+    slug: "bac-2027-sciences",
+    name: "Bac 2027 — Sciences expérimentales",
+    description: "Focused preparation for Sciences expérimentales.",
+    priceCents: 4900,
+    categoryIds: [bacSciences.id],
+  });
+
+  await upsertPack({
+    slug: "bac-2027-physique",
+    name: "Bac 2027 — Physique",
+    description: "Focused preparation for the Physique section.",
+    priceCents: 4900,
+    categoryIds: [bacPhysique.id],
+  });
+
+  await upsertPack({
+    slug: "bac-2027-mathematiques-physique",
+    name: "Bac 2027 — Mathématiques + Physique",
+    description: "A focused bundle for Mathématiques and Physique.",
+    priceCents: 7900,
+    categoryIds: [bacMaths.id, bacPhysique.id],
+  });
+
   await db.packEnrollment.upsert({
     where: { userId_packId: { userId: student.id, packId: bacPack.id } },
     update: { status: "active" },

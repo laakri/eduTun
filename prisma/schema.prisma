@@ -126,6 +126,13 @@ model Tag {
   courses CourseTag[]
 }
 
+enum VideoStatus {
+  UPLOADING
+  PROCESSING
+  READY
+  FAILED
+}
+
 model CourseTag {
   courseId String
   tagId    String
@@ -179,6 +186,7 @@ model Chapter {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   ready Boolean @default(false)
+  videoStatus VideoStatus @default(PROCESSING)
   
   course    Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
   progress  VideoProgress[]

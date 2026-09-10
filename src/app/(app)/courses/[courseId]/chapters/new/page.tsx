@@ -62,6 +62,8 @@ type BunnyStatus = {
   durationSeconds?: number;
   message: string | null;
   thumbnailUrl: string | null;
+  videoStatus?: "UPLOADING" | "PROCESSING" | "READY" | "FAILED";
+  progress?: number;
 };
 
 type Phase =
@@ -388,6 +390,7 @@ export default function NewChapterPage() {
       onSuccess: () => {
         setUploadPct(100);
         setUploadConfirmedAt(Date.now());
+        setPhase("processing");
         void finishChapterSetup(createdChapterId);
       },
       onBeforeRequest(request) {
@@ -459,7 +462,6 @@ export default function NewChapterPage() {
         if (!resourceResponse.ok)
           throw new Error("Video uploaded, but a PDF could not be uploaded.");
       }
-      setPhase("processing");
     } catch (err) {
       setPhase("error");
       setError(
@@ -762,6 +764,13 @@ export default function NewChapterPage() {
                 onClick={() => router.push(`/courses/${courseId}`)}
               >
                 Back to course
+              </Button>
+            ) : phase === "processing" ? (
+              <Button
+                type="button"
+                onClick={() => router.push(`/courses/${courseId}`)}
+              >
+                Video uploaded - continue
               </Button>
             ) : (
               <Button type="submit" disabled={locked}>

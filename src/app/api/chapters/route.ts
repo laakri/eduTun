@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { VideoStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { ok, withErrorHandler } from "@/lib/api-response";
 import { parseBody } from "@/lib/parse-body";
@@ -30,6 +31,8 @@ export const POST = withErrorHandler(async (req) => {
       order: body.order,
       videoProvider: "bunny",
       videoId,
+      videoStatus: VideoStatus.PROCESSING,
+      ready: false,
     },
   });
 

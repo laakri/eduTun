@@ -12,7 +12,7 @@ export const GET = withErrorHandler(async () => {
     },
     include: {
       chapters: {
-        where: { ready: true }
+        where: { videoStatus: "READY" },
         orderBy: {
           order: "asc",
         },

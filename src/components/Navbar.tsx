@@ -7,6 +7,8 @@ import {
   Menu,
   Search,
   LayoutDashboard,
+  BookOpen,
+  ShoppingCart,
   LogOut,
   UserRound,
   ChevronDown,
@@ -19,6 +21,7 @@ import { useSession, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LoginModal } from "@/components/LoginModal";
+import { useCart } from "@/components/cart-provider";
 
 import {
   NavigationMenu,
@@ -159,6 +162,7 @@ function AccountMenu() {
 
 export default function Navbar() {
   const { status } = useSession();
+  const cart = useCart();
   const isLoggedIn = status === "authenticated";
   const isLoading = status === "loading";
 
@@ -196,10 +200,34 @@ export default function Navbar() {
                   </Link>
                 </NavigationMenuItem>
               ))}
+              {isLoggedIn && (
+                <NavigationMenuItem>
+                  <Link
+                    href="/learn"
+                    className="text-sm text-muted-foreground transition hover:text-foreground"
+                  >
+                    My courses
+                  </Link>
+                </NavigationMenuItem>
+              )}
             </NavigationMenuList>
           </NavigationMenu>
 
           <ThemeToggle />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative"
+            onClick={cart.open}
+            aria-label={`Open cart${cart.items.length ? `, ${cart.items.length} items` : ""}`}
+          >
+            <ShoppingCart className="h-4 w-4" />
+            {cart.items.length > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
+                {cart.items.length}
+              </span>
+            )}
+          </Button>
 
           {/* AUTH AREA - DESKTOP */}
           {!isLoading && (
@@ -252,6 +280,15 @@ export default function Navbar() {
                     />
                   </div>
 
+                  <Button
+                    variant="outline"
+                    className="mt-4 h-11 justify-start gap-2.5 text-[15px]"
+                    onClick={cart.open}
+                  >
+                    <ShoppingCart className="h-4 w-4" />
+                    Cart{cart.items.length > 0 ? ` (${cart.items.length})` : ""}
+                  </Button>
+
                   {/* NAV LINKS */}
                   <nav className="mt-6 flex flex-col">
                     {NAV_LINKS.map((link) => (
@@ -264,6 +301,15 @@ export default function Navbar() {
                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
                       </Link>
                     ))}
+                    {isLoggedIn && (
+                      <Link
+                        href="/learn"
+                        className="flex items-center justify-between rounded-md px-2 py-3 text-[15px] text-foreground transition hover:bg-muted/50"
+                      >
+                        My courses
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      </Link>
+                    )}
                   </nav>
 
                   <div className="my-6 h-px bg-muted" />
@@ -272,6 +318,12 @@ export default function Navbar() {
                   <div className="flex flex-col gap-2.5">
                     {isLoading ? null : isLoggedIn ? (
                       <>
+                        <Link href="/learn">
+                          <Button variant="outline" className="h-11 w-full justify-start gap-2.5 text-[15px]">
+                            <BookOpen className="h-4 w-4" />
+                            My courses
+                          </Button>
+                        </Link>
                         <Link href="/dashboard">
                           <Button variant="outline" className="h-11 w-full justify-start gap-2.5 text-[15px]">
                             <LayoutDashboard className="h-4 w-4" />
