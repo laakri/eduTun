@@ -36,6 +36,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id: user.id,
           email: user.email,
           name: user.fullName,
+          image: user.avatarUrl ?? null,
           roles: user.roles.map((r) => r.role.slug),
         };
       },
@@ -49,6 +50,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
+        token.image = (user as { image?: string | null }).image ?? null;
         token.roles = (user as { roles: string[] }).roles;
       }
       return token;
@@ -56,6 +58,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
+        session.user.image = (token.image as string | null | undefined) ?? null;
         session.user.roles = token.roles as string[];
       }
       return session;
@@ -63,6 +66,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
 
   pages: {
-    signIn: "/",
+    signIn: "/register",
   },
 });

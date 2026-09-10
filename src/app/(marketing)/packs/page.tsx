@@ -1,388 +1,222 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
-import { ArrowRight, Check, Layers, PackageOpen, ShoppingCart, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { Check, Layers, PackageOpen, Sparkles } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { useCart } from "@/components/cart-provider";
 
-// Same token set as the course catalog page — move to a shared file
-// (e.g. lib/theme.ts) once both are wired up, so they can't drift apart.
-const tokens = {
-  ink: "#132821",
-  ink60: "rgba(19,40,33,0.62)",
-  paper: "#FAF8F2",
-  moss: "#24463A",
-  mossSoft: "#EEF2ED",
-  brass: "#A9823C",
-  brassSoft: "#F4ECDA",
-  line: "#E4E0D3",
-  card: "#FFFFFF",
-};
-
-type Pack = {
+type SubscriptionPlan = {
   id: string;
   slug: string;
   name: string;
   description: string | null;
-  priceCents: number;
-  featured?: boolean; // optional today — add a `featured` column on Pack when ready
-  items: Array<{
-    category: { name: string } | null;
-    course: { title: string } | null;
-  }>;
+  monthlyPriceCents: number;
+  quarterlyPriceCents: number;
+  yearlyPriceCents: number;
+  domain: {
+    id: string;
+    name: string;
+    slug: string;
+  };
 };
 
-// Until the API returns a real `featured` flag, fall back to picking the
-// pack by name so the banner still shows up for the seeded data.
-function findFeatured(packs: Pack[]) {
-  return (
-    packs.find((p) => p.featured) ??
-    packs.find((p) => /foundation/i.test(p.name)) ??
-    null
-  );
-}
-
-// A small decorative mark for the featured banner — a diploma/seal motif
-// built from primitives so it stays crisp and on-brand instead of a stock
-// photo. Purely illustrative, no external asset needed.
-function DiplomaMark() {
-  return (
-    <svg
-      viewBox="0 0 220 220"
-      className="h-40 w-40 sm:h-48 sm:w-48"
-      aria-hidden="true"
-    >
-      <circle
-        cx="110"
-        cy="110"
-        r="96"
-        fill="none"
-        stroke="rgba(244,236,218,0.18)"
-        strokeWidth="1"
-      />
-      <circle
-        cx="110"
-        cy="110"
-        r="76"
-        fill="none"
-        stroke="rgba(244,236,218,0.28)"
-        strokeWidth="1"
-      />
-      <circle cx="110" cy="88" r="46" fill="#F4ECDA" />
-      <path d="M62 96 L110 78 L158 96 L110 114 Z" fill="#A9823C" />
-      <path
-        d="M78 103 V128 C78 138 96 146 110 146 C124 146 142 138 142 128 V103"
-        fill="none"
-        stroke="#A9823C"
-        strokeWidth="4"
-        strokeLinecap="round"
-      />
-      <line
-        x1="158"
-        y1="96"
-        x2="158"
-        y2="122"
-        stroke="#A9823C"
-        strokeWidth="3"
-        strokeLinecap="round"
-      />
-      <circle cx="158" cy="127" r="3.5" fill="#A9823C" />
-      <path
-        d="M84 158 L110 172 L136 158 L136 188 L110 202 L84 188 Z"
-        fill="#F4ECDA"
-        opacity="0.95"
-      />
-    </svg>
-  );
-}
-
-function itemLabel(item: Pack["items"][number]) {
-  return item.category?.name ?? item.course?.title ?? null;
-}
+const billingCycles = [
+  { value: "month", label: "1 month" },
+  { value: "quarter", label: "3 months" },
+  { value: "year", label: "Full year" },
+] as const;
 
 function formatPrice(priceCents: number) {
-  if (priceCents === 0) return "Included for testing";
-  return `${(priceCents / 100).toFixed(2)} TND`;
+  return priceCents > 0 ? `${(priceCents / 100).toFixed(2)} TND` : "Free";
 }
 
 export default function PacksPage() {
-  const [packs, setPacks] = useState<Pack[]>([]);
+  const router = useRouter();
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [loading, setLoading] = useState(true);
-  const cart = useCart();
-
-  function addToCart(pack: Pack) {
-    cart.addItem({
-      id: pack.id,
-      slug: pack.slug,
-      name: pack.name,
-      priceCents: pack.priceCents,
-    });
-  }
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  const [selectedCycle, setSelectedCycle] = useState<(typeof billingCycles)[number]["value"]>("month");
+  const [subscribing, setSubscribing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/packs")
-      .then((res) => res.json())
-      .then((json) => setPacks(json.data ?? []))
+    fetch("/api/subscriptions")
+      .then(async (response) => {
+        const json = await response.json();
+        if (!response.ok) throw new Error(json.error?.message ?? "Unable to load subscriptions.");
+        const nextPlans = json.data?.plans ?? [];
+        setPlans(nextPlans);
+        if (nextPlans[0]) setSelectedPlanId(nextPlans[0].id);
+      })
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to load subscriptions."))
       .finally(() => setLoading(false));
   }, []);
 
-  const featuredPack = findFeatured(packs);
-  const gridPacks = featuredPack
-    ? packs.filter((p) => p.id !== featuredPack.id)
-    : packs;
+  const selectedPlan = useMemo(
+    () => plans.find((plan) => plan.id === selectedPlanId) ?? plans[0] ?? null,
+    [plans, selectedPlanId],
+  );
+
+  const currentPrice = selectedPlan
+    ? selectedCycle === "month"
+      ? selectedPlan.monthlyPriceCents
+      : selectedCycle === "quarter"
+        ? selectedPlan.quarterlyPriceCents
+        : selectedPlan.yearlyPriceCents
+    : 0;
+
+  async function subscribe() {
+    if (!selectedPlan) return;
+
+    setError(null);
+    setSuccess(null);
+    setSubscribing(true);
+
+    try {
+      const response = await fetch("/api/subscriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          planId: selectedPlan.id,
+          billingCycle: selectedCycle,
+        }),
+      });
+
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(json.error?.message ?? "Could not activate this subscription.");
+      }
+
+      setSuccess(`Your ${selectedPlan.name} subscription is now active.`);
+      router.push("/learn");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not activate this subscription.");
+    } finally {
+      setSubscribing(false);
+    }
+  }
 
   return (
-    <main
-      className="min-h-[calc(100svh-56px)]"
-      style={{ backgroundColor: tokens.paper, color: tokens.ink }}
-    >
-      <div className="mx-auto max-w-6xl px-6 py-14">
-        <p className="text-sm" style={{ color: tokens.brass }}>
-          Study packs
-        </p>
-        <h1 className="mt-2 max-w-2xl text-3xl font-semibold leading-tight sm:text-4xl">
-          A learning path for every goal
-        </h1>
-        <p
-          className="mt-3 max-w-2xl text-[15px] leading-relaxed"
-          style={{ color: tokens.ink60 }}
-        >
-          Each pack bundles the subjects and courses you need for a specific
-          goal. Browse freely — lessons unlock once the pack is in your account.
-        </p>
+    <main className="min-h-[calc(100svh-56px)] bg-background text-foreground">
+      <div className="mx-auto max-w-6xl px-6 py-10">
+        <div className="mb-8 flex items-center gap-2 text-sm text-primary">
+          <Layers className="h-4 w-4" />
+          Subscription plans
+        </div>
 
         {loading ? (
-          <>
-            <div
-              className="mt-10 h-56 animate-pulse rounded-xl"
-              style={{ backgroundColor: tokens.line }}
-            />
-            <div className="mt-6 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-              {[0, 1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="flex min-h-64 flex-col rounded-lg border p-6"
-                  style={{
-                    borderColor: tokens.line,
-                    backgroundColor: tokens.card,
-                  }}
-                >
-                  <div
-                    className="h-3 w-20 animate-pulse rounded"
-                    style={{ backgroundColor: tokens.line }}
-                  />
-                  <div
-                    className="mt-5 h-5 w-3/4 animate-pulse rounded"
-                    style={{ backgroundColor: tokens.line }}
-                  />
-                  <div
-                    className="mt-3 h-3 w-full animate-pulse rounded"
-                    style={{ backgroundColor: tokens.line }}
-                  />
-                  <div
-                    className="mt-2 h-3 w-5/6 animate-pulse rounded"
-                    style={{ backgroundColor: tokens.line }}
-                  />
-                  <div
-                    className="mt-auto pt-8 h-9 w-full animate-pulse rounded"
-                    style={{ backgroundColor: tokens.line }}
-                  />
-                </div>
-              ))}
-            </div>
-          </>
-        ) : packs.length === 0 ? (
-          <div
-            className="mt-10 flex flex-col items-center gap-3 rounded-lg border border-dashed p-14 text-center"
-            style={{ borderColor: tokens.line, color: tokens.ink60 }}
-          >
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {[0, 1, 2].map((index) => (
+              <div key={index} className="h-72 animate-pulse rounded-2xl bg-muted" />
+            ))}
+          </div>
+        ) : plans.length === 0 ? (
+          <div className="mt-10 flex flex-col items-center gap-3 rounded-lg border border-dashed border-border p-14 text-center text-muted-foreground">
             <PackageOpen className="h-6 w-6" />
-            <p className="text-sm">
-              No packs are available yet. Check back soon.
-            </p>
+            <p className="text-sm">No subscription plans are available yet. Please check back soon.</p>
           </div>
         ) : (
-          <>
-            {featuredPack && (
-              <div
-                className="relative mt-10 overflow-hidden rounded-xl"
-                style={{ backgroundColor: tokens.moss }}
-              >
-                {/* faint dot texture behind the copy — subtle, not a gradient wash */}
-                <div
-                  className="absolute inset-0 opacity-[0.15]"
-                  style={{
-                    backgroundImage:
-                      "radial-gradient(rgba(244,236,218,0.6) 1px, transparent 1px)",
-                    backgroundSize: "16px 16px",
-                  }}
-                />
-                <div className="relative flex flex-col items-start gap-8 p-8 sm:flex-row sm:items-center sm:justify-between sm:p-10">
-                  <div className="max-w-lg">
-                    <div
-                      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
-                      style={{
-                        backgroundColor: "rgba(244,236,218,0.14)",
-                        color: tokens.brassSoft,
-                      }}
-                    >
-                      <Sparkles className="h-3.5 w-3.5" />
-                      Featured pack
-                    </div>
-                    <h2 className="mt-4 text-2xl font-semibold text-white sm:text-3xl">
-                      {featuredPack.name}
-                    </h2>
-                    <p
-                      className="mt-2 text-[15px] leading-relaxed"
-                      style={{ color: "rgba(250,248,242,0.75)" }}
-                    >
-                      {featuredPack.description ||
-                        "A structured collection of courses and subjects."}
-                    </p>
-
-                    <div className="mt-4 flex flex-wrap items-center gap-2">
-                      {(
-                        featuredPack.items
-                          .map(itemLabel)
-                          .filter(Boolean) as string[]
-                      )
-                        .slice(0, 4)
-                        .map((label) => (
-                          <span
-                            key={label}
-                            className="rounded-full px-2.5 py-1 text-xs"
-                            style={{
-                              backgroundColor: "rgba(244,236,218,0.14)",
-                              color: tokens.brassSoft,
-                            }}
-                          >
-                            {label}
-                          </span>
-                        ))}
-                    </div>
-
-                    <div className="mt-6 flex items-center gap-4">
-                      <Button
-                        style={{
-                          backgroundColor: tokens.brassSoft,
-                          color: tokens.ink,
-                        }}
-                        onClick={() => addToCart(featuredPack)}
-                      >
-                        <ShoppingCart className="h-3.5 w-3.5" />
-                        Add to cart
-                      </Button>
-                      <span className="text-sm font-medium text-white">
-                        {formatPrice(featuredPack.priceCents)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="shrink-0 self-center opacity-95">
-                    <DiplomaMark />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {gridPacks.length > 0 && (
-              <p
-                className="mt-10 text-sm font-medium"
-                style={{ color: tokens.ink60 }}
-              >
-                {featuredPack ? "Other packs" : "All packs"}
-              </p>
-            )}
-            <div
-              className={`grid gap-5 md:grid-cols-2 lg:grid-cols-3 ${gridPacks.length > 0 ? "mt-4" : "mt-10"}`}
-            >
-              {gridPacks.map((pack) => {
-                const labels = pack.items
-                  .map(itemLabel)
-                  .filter(Boolean) as string[];
-                const shown = labels.slice(0, 4);
-                const extra = labels.length - shown.length;
-
+          <div className="grid gap-8 xl:grid-cols-[1.2fr_0.8fr]">
+            <div className="space-y-5">
+              {plans.map((plan) => {
+                const isSelected = selectedPlanId === plan.id;
                 return (
                   <Card
-                    key={pack.id}
-                    className="flex h-full min-h-64 flex-col rounded-lg p-6 transition-colors"
-                    style={{
-                      borderColor: tokens.line,
-                      backgroundColor: tokens.card,
-                    }}
+                    key={plan.id}
+                    className={`cursor-pointer border-2 p-5 transition ${
+                      isSelected ? "border-primary bg-primary/5" : "border-border bg-card"
+                    }`}
+                    onClick={() => setSelectedPlanId(plan.id)}
                   >
-                    <div
-                      className="flex items-center gap-2 text-xs"
-                      style={{ color: tokens.ink60 }}
-                    >
-                      <Layers
-                        className="h-3.5 w-3.5"
-                        style={{ color: tokens.brass }}
-                      />
-                      {labels.length} subject{labels.length === 1 ? "" : "s"}{" "}
-                      included
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.16em] text-primary">{plan.domain.name}</p>
+                        <h2 className="mt-2 text-2xl font-semibold">{plan.name}</h2>
+                      </div>
+                      {isSelected && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                          <Check className="h-3.5 w-3.5" /> Selected
+                        </span>
+                      )}
                     </div>
-
-                    <h2 className="mt-3 text-xl font-semibold leading-snug">
-                      {pack.name}
-                    </h2>
-                    <p
-                      className="mt-2 text-sm leading-relaxed"
-                      style={{ color: tokens.ink60 }}
-                    >
-                      {pack.description ||
-                        "A structured collection of courses and subjects."}
-                    </p>
-
-                    {shown.length > 0 && (
-                      <ul className="mt-4 space-y-1.5">
-                        {shown.map((label) => (
-                          <li
-                            key={label}
-                            className="flex items-start gap-2 text-sm"
-                          >
-                            <Check
-                              className="mt-0.5 h-3.5 w-3.5 shrink-0"
-                              style={{ color: tokens.brass }}
-                            />
-                            <span className="truncate">{label}</span>
-                          </li>
-                        ))}
-                        {extra > 0 && (
-                          <li
-                            className="pl-5 text-xs"
-                            style={{ color: tokens.ink60 }}
-                          >
-                            +{extra} more
-                          </li>
-                        )}
-                      </ul>
-                    )}
-
-                    <div
-                      className="mt-auto flex items-center justify-between border-t pt-5"
-                      style={{ borderColor: tokens.line }}
-                    >
-                      <span className="font-semibold">
-                        {formatPrice(pack.priceCents)}
-                      </span>
-                      <Button
-                        size="sm"
-                        style={{ backgroundColor: tokens.moss, color: "white" }}
-                        onClick={() => addToCart(pack)}
-                      >
-                        <ShoppingCart className="h-3.5 w-3.5" />
-                        Add to cart
-                      </Button>
+                    <p className="mt-3 text-sm text-muted-foreground">{plan.description}</p>
+                    <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-xl border border-border bg-background p-3">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">1 month</p>
+                        <p className="mt-2 text-lg font-semibold">{formatPrice(plan.monthlyPriceCents)}</p>
+                      </div>
+                      <div className="rounded-xl border border-border bg-background p-3">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">3 months</p>
+                        <p className="mt-2 text-lg font-semibold">{formatPrice(plan.quarterlyPriceCents)}</p>
+                      </div>
+                      <div className="rounded-xl border border-border bg-background p-3">
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Full year</p>
+                        <p className="mt-2 text-lg font-semibold">{formatPrice(plan.yearlyPriceCents)}</p>
+                      </div>
                     </div>
                   </Card>
                 );
               })}
             </div>
-          </>
+
+            <aside className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+              <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary">
+                <Sparkles className="h-3.5 w-3.5" />
+                Billing
+              </div>
+
+              <h3 className="mt-4 text-2xl font-semibold">{selectedPlan?.name ?? "Choose a plan"}</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {selectedPlan?.description ?? "Select a domain to begin your subscription."}
+              </p>
+
+              <div className="mt-5 space-y-2">
+                {billingCycles.map((cycle) => (
+                  <button
+                    key={cycle.value}
+                    type="button"
+                    onClick={() => setSelectedCycle(cycle.value)}
+                    className={`flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left text-sm transition ${
+                      selectedCycle === cycle.value
+                        ? "border-primary bg-primary/5 text-foreground"
+                        : "border-border bg-background text-muted-foreground hover:border-primary/40"
+                    }`}
+                  >
+                    <span>{cycle.label}</span>
+                    <span className="font-medium text-foreground">
+                      {selectedPlan
+                        ? formatPrice(
+                            cycle.value === "month"
+                              ? selectedPlan.monthlyPriceCents
+                              : cycle.value === "quarter"
+                                ? selectedPlan.quarterlyPriceCents
+                                : selectedPlan.yearlyPriceCents,
+                          )
+                        : "—"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-6 rounded-xl border border-border bg-muted/30 p-4">
+                <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Total</p>
+                <div className="mt-2 flex items-end justify-between gap-3">
+                  <span className="text-3xl font-semibold">{formatPrice(currentPrice)}</span>
+                  <span className="text-xs text-muted-foreground">/{selectedCycle === "month" ? "month" : selectedCycle === "quarter" ? "3 months" : "year"}</span>
+                </div>
+              </div>
+
+              {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
+              {success && <p className="mt-4 text-sm text-primary">{success}</p>}
+
+              <Button className="mt-6 w-full" onClick={subscribe} disabled={!selectedPlan || subscribing}>
+                {subscribing ? "Activating..." : "Subscribe now"}
+              </Button>
+            </aside>
+          </div>
         )}
       </div>
     </main>

@@ -47,7 +47,7 @@ type CourseVM = {
   description: string;
   categories: string[];
   tags: string[];
-  prof: { name: string; role: string };
+  prof: { id: string; name: string; role: string };
   chapters: ChapterVM[];
 };
 
@@ -452,9 +452,14 @@ export default function BrowseCoursesPage() {
                           {initials(course.prof.name)}
                         </AvatarFallback>
                       </Avatar>
-                      <span className="text-xs" style={{ color: tokens.ink60 }}>
+                      <Link
+                        href={`/professors/${course.prof.id}`}
+                        onClick={(event) => event.stopPropagation()}
+                        className="text-xs hover:underline"
+                        style={{ color: tokens.ink60 }}
+                      >
                         {course.prof.name}
-                      </span>
+                      </Link>
                     </div>
                     <Separator
                       className="my-4"

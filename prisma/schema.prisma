@@ -78,10 +78,15 @@ model User {
   profApplications ProfApplication[] @relation("ApplicantApplications")
   reviewedProfApplications ProfApplication[] @relation("ApplicationReviewer")
   packEnrollments PackEnrollment[]
+  subscriptions   UserSubscription[]
   progress        VideoProgress[]
   quizAttempts    QuizAttempt[]
   pfeListings     PfeListing[]     @relation("CompanyListings")
   pfeApplications PfeApplication[]
+  professorRatings ProfessorRating[] @relation("ProfessorRatingAuthor")
+  ratingsGiven ProfessorRating[] @relation("ProfessorRatingUser")
+  chapterVotes    ChapterVote[]
+  chapterComments ChapterComment[]
 }
 
 model Role {
@@ -113,9 +118,10 @@ model Category {
   parent   Category?  @relation("CategoryToCategory", fields: [parentId], references: [id])
   children Category[] @relation("CategoryToCategory")
 
-  courses     CourseCategory[]
-  pfeListings PfeListing[]
-  packItems   PackItem[]
+  courses          CourseCategory[]
+  pfeListings      PfeListing[]
+  packItems        PackItem[]
+  subscriptionPlans SubscriptionPlan[]
   profApplications ProfApplicationCategory[]
 }
 
@@ -193,6 +199,52 @@ model Chapter {
   quiz      Quiz?
   sections  VideoSection[]
   resources ChapterResource[]
+  votes ChapterVote[]
+  comments ChapterComment[]
+}
+
+model ProfessorRating {
+  id         String   @id @default(cuid())
+  professorId String
+  userId     String
+  rating     Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  professor User @relation("ProfessorRatingAuthor", fields: [professorId], references: [id], onDelete: Cascade)
+  user User @relation("ProfessorRatingUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([professorId, userId])
+  @@index([professorId])
+}
+
+model ChapterVote {
+  id        String   @id @default(cuid())
+  chapterId String
+  userId    String
+  value     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([chapterId, userId])
+  @@index([chapterId])
+}
+
+model ChapterComment {
+  id        String   @id @default(cuid())
+  chapterId String
+  userId    String
+  body      String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([chapterId, createdAt])
 }
 
 // Timestamp labels inside a chapter video (e.g. 0–5m = Introduction).
@@ -277,6 +329,40 @@ model QuizAttempt {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+}
+
+model SubscriptionPlan {
+  id               String   @id @default(cuid())
+  slug             String   @unique
+  name             String
+  description      String?
+  domainId         String
+  monthlyPriceCents Int     @default(0)
+  quarterlyPriceCents Int    @default(0)
+  yearlyPriceCents   Int     @default(0)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  domain Category @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  subscriptions UserSubscription[]
+}
+
+model UserSubscription {
+  id          String   @id @default(cuid())
+  userId      String
+  planId      String
+  billingCycle String   @default("month")
+  status      String   @default("active")
+  startedAt   DateTime @default(now())
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
 }
 
 // ------------------------------------------------------------

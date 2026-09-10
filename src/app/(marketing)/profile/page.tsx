@@ -11,6 +11,7 @@ import {
   BookOpen,
   CheckCircle2,
   Circle,
+  ExternalLink,
   Pencil,
   X,
 } from "lucide-react";
@@ -89,7 +90,8 @@ export default function ProfilePage() {
           setPhone(data.phone ?? "");
         }
       } catch {
-        if (!cancelled) setLoadError("We couldn't load your profile. Try refreshing.");
+        if (!cancelled)
+          setLoadError("We couldn't load your profile. Try refreshing.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -140,7 +142,9 @@ export default function ProfilePage() {
     setEditing(false);
   }
 
-  async function handleAvatarChange(event: React.ChangeEvent<HTMLInputElement>) {
+  async function handleAvatarChange(
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -189,12 +193,15 @@ export default function ProfilePage() {
   if (loadError || !profile) {
     return (
       <div className="mx-auto max-w-md px-4 py-24 text-center">
-        <p className="text-sm text-muted-foreground">{loadError || "Profile not found."}</p>
+        <p className="text-sm text-muted-foreground">
+          {loadError || "Profile not found."}
+        </p>
       </div>
     );
   }
 
-  const isProfessor = profile.roles.includes("professor") || profile.coursesTaught.length > 0;
+  const isProfessor =
+    profile.roles.includes("professor") || profile.coursesTaught.length > 0;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:py-14">
@@ -219,7 +226,7 @@ export default function ProfilePage() {
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
             aria-label="Change profile photo"
-            className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border border-background bg-foreground text-background transition hover:opacity-90 disabled:opacity-60"
+            className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-background transition hover:opacity-90 disabled:opacity-60"
           >
             {uploading ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -237,7 +244,7 @@ export default function ProfilePage() {
           />
         </div>
 
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h1 className="truncate text-xl font-semibold text-foreground sm:text-2xl">
             {profile.fullName}
           </h1>
@@ -258,7 +265,7 @@ export default function ProfilePage() {
               {profile.roles.map((role) => (
                 <span
                   key={role}
-                  className="rounded-full border border-muted bg-muted/40 px-2.5 py-0.5 text-xs text-foreground"
+                  className="rounded-full bg-muted/40 px-2.5 py-0.5 text-xs text-foreground"
                 >
                   {ROLE_LABELS[role] ?? role}
                 </span>
@@ -266,16 +273,39 @@ export default function ProfilePage() {
             </div>
           )}
         </div>
+
+        {isProfessor && (
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="shrink-0 gap-1.5"
+          >
+            <Link href={`/professors/${profile.id}`}>
+              <ExternalLink className="h-3.5 w-3.5" />
+              View public profile
+            </Link>
+          </Button>
+        )}
       </div>
 
-      {uploadError && <p className="mt-3 text-sm text-destructive">{uploadError}</p>}
+      {uploadError && (
+        <p className="mt-3 text-sm text-destructive">{uploadError}</p>
+      )}
 
       {/* ACCOUNT DETAILS */}
-      <section className="mt-10 rounded-lg border border-muted">
-        <div className="flex items-center justify-between border-b border-muted px-5 py-4">
-          <h2 className="text-sm font-medium text-foreground">Account details</h2>
+      <section className="mt-10 rounded-lg bg-muted/30">
+        <div className="flex items-center justify-between px-5 py-4">
+          <h2 className="text-sm font-medium text-foreground">
+            Account details
+          </h2>
           {!editing && (
-            <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setEditing(true)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setEditing(true)}
+            >
               <Pencil className="h-3.5 w-3.5" />
               Edit
             </Button>
@@ -308,10 +338,17 @@ export default function ProfilePage() {
                 />
               </div>
 
-              {saveError && <p className="text-sm text-destructive">{saveError}</p>}
+              {saveError && (
+                <p className="text-sm text-destructive">{saveError}</p>
+              )}
 
               <div className="flex items-center gap-2 pt-1">
-                <Button type="submit" size="sm" disabled={saving} className="gap-1.5">
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={saving}
+                  className="gap-1.5"
+                >
                   {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                   Save changes
                 </Button>
@@ -332,14 +369,18 @@ export default function ProfilePage() {
             <dl className="grid gap-4 sm:grid-cols-2">
               <div>
                 <dt className="text-xs text-muted-foreground">Full name</dt>
-                <dd className="mt-1 text-sm text-foreground">{profile.fullName}</dd>
+                <dd className="mt-1 text-sm text-foreground">
+                  {profile.fullName}
+                </dd>
               </div>
               <div>
                 <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Phone className="h-3 w-3" /> Phone
                 </dt>
                 <dd className="mt-1 text-sm text-foreground">
-                  {profile.phone || <span className="text-muted-foreground">Not set</span>}
+                  {profile.phone || (
+                    <span className="text-muted-foreground">Not set</span>
+                  )}
                 </dd>
               </div>
             </dl>
@@ -349,13 +390,23 @@ export default function ProfilePage() {
 
       {/* COURSES TAUGHT */}
       {isProfessor && (
-        <section className="mt-8 rounded-lg border border-muted">
-          <div className="flex items-center justify-between border-b border-muted px-5 py-4">
-            <h2 className="text-sm font-medium text-foreground">Courses you teach</h2>
-            <span className="text-xs text-muted-foreground">
-              {profile.coursesTaught.length}{" "}
-              {profile.coursesTaught.length === 1 ? "course" : "courses"}
-            </span>
+        <section className="mt-8 rounded-lg bg-muted/30">
+          <div className="flex items-center justify-between px-5 py-4">
+            <h2 className="text-sm font-medium text-foreground">
+              Courses you teach
+            </h2>
+            <div className="flex items-center gap-3">
+              <Link
+                href={`/professors/${profile.id}`}
+                className="text-xs text-primary hover:underline"
+              >
+                Public view
+              </Link>
+              <span className="text-xs text-muted-foreground">
+                {profile.coursesTaught.length}{" "}
+                {profile.coursesTaught.length === 1 ? "course" : "courses"}
+              </span>
+            </div>
           </div>
 
           {profile.coursesTaught.length === 0 ? (
@@ -377,7 +428,9 @@ export default function ProfilePage() {
                   >
                     <div className="flex min-w-0 items-center gap-3">
                       <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <span className="truncate text-sm text-foreground">{course.title}</span>
+                      <span className="truncate text-sm text-foreground">
+                        {course.title}
+                      </span>
                     </div>
 
                     <div className="flex shrink-0 items-center gap-4">

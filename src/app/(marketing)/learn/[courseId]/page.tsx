@@ -121,7 +121,7 @@ export default function LearnCoursePage() {
                   </p>
                 </div>
               )}
-            </
+            </>
           )}
         </section>
         <aside className="rounded-xl p-3 bg-muted">

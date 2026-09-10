@@ -1,594 +1,344 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   ArrowRight,
-  ArrowUpRight,
-  BadgeCheck,
-  BookOpen,
-  Calculator,
-  Command,
-  FlaskConical,
-  Globe2,
-  Languages,
-  Lock,
+  Clock3,
+  PenLine,
   Search,
-  ShieldCheck,
-  Sigma,
-  Sparkles,
-  TrendingUp,
-  Users,
+  Star,
 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 
-// Narrow "shell" width used everywhere instead of the usual wide container.
-const SHELL = "mx-auto w-full max-w-5xl px-6";
+// ---------------------------------------------------------------------------
+// Content
+// ---------------------------------------------------------------------------
 
-const NAV = [
-  "Home",
-  "Courses",
-  "Exams",
-  "Rankings",
-  "Tracks",
-  "Teachers",
-  "Pricing",
-  "Docs",
+const quickLinks = [
+  { label: "Sciences", href: "/courses?category=Sciences" },
+  { label: "Langues", href: "/courses?category=Langues" },
+  { label: "Sciences humaines", href: "/courses?category=Sciences+humaines" },
+  { label: "Vie professionnelle", href: "/courses?category=Professionnel" },
 ];
 
-const STATS = [
-  { value: "12+", label: "Subjects" },
-  { value: "48K+", label: "Students" },
-  { value: "80+", label: "Teachers" },
-  { value: "3,200+", label: "Past exams" },
-];
+const board = [
+  {
+    id: "maths-fonctions",
+    prof: "Sami Bouzid",
+    role: "Professeur de mathématiques",
+    title: "Fonctions et suites numériques",
+    nextChapter: "Chapitre 4 : la fonction dérivée",
+    level: "Lycée",
+    chapters: 12,
+    duration: "3 h 45",
+    rating: 4.9,
+    accent: "ochre",
+  },
+  {
+    id: "corps-humain",
+    prof: "Ines Rekik",
+    role: "Professeure de sciences",
+    title: "Le corps humain, en détail",
+    nextChapter: "Chapitre 2 : le système digestif",
+    level: "Collège",
+    chapters: 6,
+    duration: "1 h 50",
+    rating: 4.8,
+    accent: "ochre",
+  },
+  {
+    id: "francais-commentaire",
+    prof: "Amira Sassi",
+    role: "Professeure de lettres",
+    title: "Maîtriser le commentaire composé",
+    nextChapter: "Chapitre 2 : construire un plan",
+    level: "Lycée",
+    chapters: 9,
+    duration: "2 h 20",
+    rating: 4.8,
+    accent: "teal",
+  },
+  {
+    id: "anglais-pro",
+    prof: "Nadia Kort",
+    role: "Formatrice en langues",
+    title: "Anglais professionnel : présenter son travail",
+    nextChapter: "Chapitre 1 : se présenter en réunion",
+    level: "Adultes",
+    chapters: 7,
+    duration: "2 h 10",
+    rating: 4.9,
+    accent: "teal",
+  },
+  {
+    id: "philo-conscience",
+    prof: "Mehdi Ouali",
+    role: "Professeur de philosophie",
+    title: "La conscience",
+    nextChapter: "Chapitre 5 : la conscience de soi",
+    level: "Lycée",
+    chapters: 8,
+    duration: "2 h 50",
+    rating: 4.7,
+    accent: "ink",
+  },
+  {
+    id: "excel-debutant",
+    prof: "Karim Trabelsi",
+    role: "Formateur bureautique",
+    title: "Excel : les bases pour bien démarrer",
+    nextChapter: "Chapitre 3 : les formules simples",
+    level: "Adultes",
+    chapters: 10,
+    duration: "3 h 00",
+    rating: 4.7,
+    accent: "umber",
+  },
+  {
+    id: "python-debutant",
+    prof: "Youssef Ben Ali",
+    role: "Formateur en informatique",
+    title: "Premiers pas avec Python",
+    nextChapter: "Chapitre 1 : variables et types",
+    level: "Adultes",
+    chapters: 11,
+    duration: "3 h 20",
+    rating: 4.9,
+    accent: "umber",
+  },
+] as const;
 
-const COURSES = [
-  {
-    icon: Sigma,
-    name: "Mathématiques",
-    tag: "New",
-    by: "Section Sciences Exp",
-    lessons: "184",
-    trend: "+14%",
-  },
-  {
-    icon: FlaskConical,
-    name: "Physique-Chimie",
-    by: "Section Sciences Exp",
-    lessons: "156",
-    trend: "+9%",
-  },
-  {
-    icon: Languages,
-    name: "Philosophie",
-    tag: "New",
-    by: "Section Lettres",
-    lessons: "92",
-    trend: "--",
-  },
-];
+type Accent = "ochre" | "teal" | "umber" | "ink";
 
-const TRACKS = [
-  {
-    title: "SCIENCES-EXP",
-    name: "Track Sciences Expérimentales",
-    tagline: "A full-year path that adapts to your weakest chapters",
-    icon: FlaskConical,
-  },
-  {
-    title: "MATH+",
-    name: "Track Mathématiques",
-    tagline: "Depth-first prep for engineering-school hopefuls",
-    icon: Calculator,
-  },
-  {
-    title: "LETTRES",
-    name: "Track Lettres",
-    tagline: "Essays corrected by former Bac examiners",
-    icon: BookOpen,
-  },
-];
+const accentBar: Record<Accent, string> = {
+  ochre: "bg-[#C8872E]",
+  teal: "bg-[#1F4F47]",
+  umber: "bg-[#6B4F3A]",
+  ink: "bg-foreground/60",
+};
 
-const STEPS = [
-  {
-    n: "1",
-    title: "Signup",
-    description:
-      "Create an account to get started. You can join a class group later.",
-  },
-  {
-    n: "2",
-    title: "Pick your track",
-    description: "Courses can be mixed and matched across any section.",
-  },
-  {
-    n: "3",
-    title: "Start practicing",
-    description: "Work past exams and get corrections within 48 hours.",
-  },
-];
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 
-const POSTS = [
-  {
-    title: "2026 Physics-Chemistry Corrections Are Live",
-    description:
-      "Full worked solutions for the June session paper, including the bonus exercise most students missed.",
-    date: "Sep 2, 2026",
-    isNew: true,
-    image: "https://picsum.photos/seed/edutun-post-physics/200/200",
-  },
-  {
-    title: "Bac Blanc Schedule For October",
-    description:
-      "Mock exam dates for every section, with a live review session the following week.",
-    date: "Aug 28, 2026",
-    isNew: true,
-    image: "https://picsum.photos/seed/edutun-post-schedule/200/200",
-  },
-  {
-    title: "How Bac Grading Actually Works",
-    description:
-      "A breakdown of coefficients by section, and why your Math grade matters more than you think.",
-    date: "Aug 20, 2026",
-    image: "https://picsum.photos/seed/edutun-post-grading/200/200",
-  },
-];
+export default function HomePage() {
+  const [professorQuery, setProfessorQuery] = useState("");
+  const [professors, setProfessors] = useState<
+    Array<{ id: string; fullName: string; courseCount: number }>
+  >([]);
 
-export default function Home() {
+  useEffect(() => {
+    const query = professorQuery.trim();
+    if (query.length < 2) {
+      setProfessors([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      fetch(`/api/professors?q=${encodeURIComponent(query)}`, {
+        signal: controller.signal,
+      })
+        .then((response) => response.json())
+        .then((json) => setProfessors(json.data ?? []))
+        .catch(() => setProfessors([]));
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [professorQuery]);
+
+  const visibleProfessors = professorQuery.trim().length >= 2 ? professors : [];
+
   return (
-    <div className="min-h-screen bg-background text-foreground antialiased">
-      <main>
-        {/* Hero */}
-        <section className="pb-16 pt-20 text-center sm:pt-28">
-          <div className={SHELL}>
-            <h1 className="text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-6xl">
-              The Complete Platform
-              <br />
-              For Every Bac Section
-            </h1>
+    <main className="min-h-screen bg-background text-foreground">
+      {/* Search */}
+      <section className="border-b border-border">
+        <div className="mx-auto max-w-5xl px-6 pb-10 pt-14 sm:pt-16">
+          <h1 className="max-w-2xl text-3xl font-semibold leading-tight tracking-tight sm:text-4xl">
+            Cherchez un prof, une matière, ou parcourez ce qui se donne en ce
+            moment.
+          </h1>
 
-            <p className="mx-auto mt-6 max-w-lg text-muted-foreground">
-              Better courses,{" "}
-              <span className="text-foreground underline underline-offset-4">
-                better corrections
-              </span>
-              , no wasted study time.
-            </p>
+          <form action="/courses" method="get" className="relative mt-6 max-w-xl">
+            <div className="flex items-stretch rounded-md border border-border bg-card">
+              <div className="flex items-center pl-4">
+                <Search className="h-4 w-4 text-muted-foreground" />
+              </div>
 
-            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Link href="/register">
-                <Button
-                  size="lg"
-                  className="w-full bg-lime-400 font-semibold text-black hover:bg-lime-300 sm:w-auto"
-                >
-                  Get Started
-                </Button>
-              </Link>
-              <Link href="/packs">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="w-full gap-2 border-border bg-transparent text-foreground hover:bg-accent sm:w-auto"
-                >
-                  Explore packs <Sparkles className="h-4 w-4" />
-                </Button>
-              </Link>
+              <Input
+                name="q"
+                value={professorQuery}
+                onChange={(event) => setProfessorQuery(event.target.value)}
+                placeholder="Ex : Sami Bouzid, dérivées, Excel..."
+                className="h-12 border-0 bg-transparent shadow-none focus-visible:ring-0"
+              />
+
+              <Button type="submit" className="m-1.5 h-9 px-5">
+                Rechercher
+              </Button>
             </div>
-          </div>
-        </section>
 
-        {/* Stats */}
-        <section className="pb-16">
-          <div
-            className={`${SHELL} grid grid-cols-2 gap-8 sm:grid-cols-4 sm:gap-4`}
-          >
-            {STATS.map((stat) => (
-              <div key={stat.label} className="text-center">
-                <div className="text-3xl font-extrabold sm:text-4xl">
-                  {stat.value}
-                </div>
-                <div className="mt-1 text-sm text-muted-foreground">{stat.label}</div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* 4 feature cards */}
-        {/* 4 feature cards */}
-        <section className="pb-24">
-          <div className={`${SHELL} grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4`}>
-
-            {/* CARD TEMPLATE STYLE NOTE:
-        ALL cards use:
-        - fixed top area (h-20)
-        - same padding rhythm
-        - consistent visual anchor
-    */}
-
-            {/* CARD 1 */}
-            <div className="rounded-xl border border-border bg-muted/50 p-5 flex flex-col h-full">
-
-              {/* TOP (fixed height frame) */}
-              <div className="h-20 flex items-center justify-center">
-                <div className="grid grid-cols-4 gap-2">
-                  {[Sigma, FlaskConical, Languages, Globe2, Calculator, BookOpen, Users, Sparkles].map(
-                    (Icon, i) => (
-                      <div
-                        key={i}
-                        className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground"
-                      >
-                        <Icon className="h-4 w-4" />
-                      </div>
-                    )
-                  )}
-                </div>
-              </div>
-
-              {/* MIDDLE */}
-              <div className="mt-4">
-                <h3 className="font-semibold">All Subjects, One Place</h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Generate a full study plan across every subject in one unified dashboard.
+            {visibleProfessors.length > 0 && (
+              <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-md border border-border bg-popover shadow-lg">
+                <p className="border-b border-border px-4 py-2 text-xs text-muted-foreground">
+                  Professeurs correspondants
                 </p>
-              </div>
-
-              {/* BOTTOM */}
-              <div className="mt-auto pt-5">
-                <Link href="/courses" className="text-sm underline underline-offset-4">
-                  Browse all
-                </Link>
-              </div>
-            </div>
-
-            {/* CARD 2 */}
-            <div className="rounded-xl border border-border bg-muted/50 p-5 flex flex-col h-full">
-
-              {/* TOP (same height frame) */}
-              <div className="h-20 flex items-center justify-center">
-
-                <div className="flex flex-col items-center gap-2">
-
-                  <div className="rounded-md border border-border bg-background px-3 py-1 text-xs text-muted-foreground">
-                    edutun/mathematiques-t
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    <Users className="h-4 w-4" />
-                    <BookOpen className="h-4 w-4 text-lime-500" />
-                    <BadgeCheck className="h-4 w-4" />
-                  </div>
-
-                </div>
-
-              </div>
-
-              {/* MIDDLE */}
-              <div className="mt-4">
-                <h3 className="font-semibold">Never Miss a Lesson</h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Recorded lessons fall back for you when your teacher isn't available.
-                </p>
-              </div>
-
-              {/* BOTTOM */}
-              <div className="mt-auto pt-5">
-                <Link href="/tracks" className="text-sm underline underline-offset-4">
-                  Learn more
-                </Link>
-              </div>
-            </div>
-
-            {/* CARD 3 */}
-            <div className="rounded-xl border border-border bg-muted/50 p-5 flex flex-col h-full">
-
-              {/* TOP (same height frame) */}
-              <div className="h-20 flex items-center justify-center">
-                <div className="w-full rounded-lg border border-border bg-background p-3">
-                  <div className="mb-2 flex justify-between text-[10px] text-muted-foreground">
-                    <span>Average</span>
-                    <span>+3.4 pts</span>
-                  </div>
-                  <svg viewBox="0 0 200 60" className="h-10 w-full">
-                    <polyline
-                      fill="none"
-                      stroke="#a3e635"
-                      strokeWidth="2"
-                      points="0,50 30,45 60,48 90,30 120,34 150,15 180,20 200,8"
-                    />
-                  </svg>
-                </div>
-              </div>
-
-              {/* MIDDLE */}
-              <div className="mt-4">
-                <h3 className="font-semibold">Track Your Progress</h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  See grade trends by subject so you know what to fix first.
-                </p>
-              </div>
-
-              {/* BOTTOM */}
-              <div className="mt-auto pt-5">
-                <Link href="/rankings" className="text-sm underline underline-offset-4">
-                  Learn more
-                </Link>
-              </div>
-            </div>
-
-            {/* CARD 4 */}
-            <div className="rounded-xl border border-border bg-muted/50 p-5 flex flex-col h-full">
-
-              {/* TOP (same height frame) */}
-              <div className="h-20 flex items-center justify-center gap-3">
-                <Lock className="h-4 w-4 text-muted-foreground" />
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                  <ShieldCheck className="h-6 w-6 text-lime-500" />
-                </div>
-                <Lock className="h-4 w-4 text-muted-foreground" />
-              </div>
-
-              {/* MIDDLE */}
-              <div className="mt-4">
-                <h3 className="font-semibold">Corrected By Teachers</h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Every practice exam is reviewed by a subject teacher, not an answer key.
-                </p>
-              </div>
-
-              {/* BOTTOM */}
-              <div className="mt-auto pt-5">
-                <Link href="/teachers" className="text-sm underline underline-offset-4">
-                  View teachers
-                </Link>
-              </div>
-            </div>
-
-          </div>
-        </section>
-
-        {/* Featured Courses */}
-        <section className="pb-20">
-          <div className={SHELL}>
-            <div className="mb-6 flex items-end justify-between">
-              <div>
-                <h2 className="text-xl font-semibold">Featured Courses</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  3,200+ past exams across 12+ subjects
-                </p>
-              </div>
-              <Link
-                href="/courses"
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-              >
-                View all <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              {COURSES.map((course) => (
-                <div
-                  key={course.name}
-                  className="rounded-xl border border-border bg-muted/50 p-5"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted">
-                      <course.icon className="h-4 w-4" />
-                    </div>
-                    <span className="font-medium">{course.name}</span>
-                    {course.tag && (
-                      <Badge className="bg-lime-400/20 text-lime-700 dark:text-lime-300 hover:bg-lime-400/20">
-                        {course.tag}
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="mt-1 text-xs text-muted-foreground">by {course.by}</p>
-
-                  <Separator className="my-4 bg-muted" />
-
-                  <div className="flex justify-between text-sm">
-                    <div>
-                      <div className="text-muted-foreground">Lessons</div>
-                      <div className="font-medium">{course.lessons}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-muted-foreground">Weekly Progress</div>
-                      <div
-                        className={
-                          course.trend !== "--"
-                            ? "font-medium text-lime-700 dark:text-lime-400"
-                            : "font-medium text-muted-foreground"
-                        }
-                      >
-                        {course.trend}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Featured Tracks (agents equivalent) */}
-        <section className="pb-20">
-          <div className={SHELL}>
-            <div className="mb-6 flex items-end justify-between">
-              <div>
-                <h2 className="text-xl font-semibold">Featured Tracks</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  48K+ students learning across every section
-                </p>
-              </div>
-              <Link
-                href="/tracks"
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-              >
-                View all <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              {TRACKS.map((track) => (
-                <div
-                  key={track.name}
-                  className="overflow-hidden rounded-xl border border-border bg-muted/50"
-                >
-                  <div className="flex h-32 items-center justify-center bg-gradient-to-br from-muted to-transparent">
-                    <span className="font-mono text-lg font-bold tracking-wider text-lime-700 dark:text-lime-300">
-                      {track.title}
+                {visibleProfessors.map((professor) => (
+                  <Link
+                    key={professor.id}
+                    href={`/professors/${professor.id}`}
+                    onClick={() => setProfessors([])}
+                    className="flex items-center justify-between px-4 py-3 text-sm transition-colors hover:bg-muted"
+                  >
+                    <span>{professor.fullName}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {professor.courseCount} cours
                     </span>
-                  </div>
-                  <div className="flex items-start gap-3 p-4">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
-                      <track.icon className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <div className="font-medium">{track.name}</div>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {track.tagline}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Steps */}
-        <section className="pb-24">
-          <div className={`${SHELL} grid grid-cols-1 gap-10 sm:grid-cols-3`}>
-            {STEPS.map((step) => (
-              <div key={step.n}>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full border border-border text-xs text-foreground">
-                    {step.n}
-                  </span>
-                  {step.title}
-                </div>
-                <p className="mt-3 text-sm text-muted-foreground">
-                  {step.description}
-                </p>
-                <div className="mt-4 flex items-center gap-1.5">
-                  <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
-                  <div className="h-1.5 flex-1 rounded-full bg-muted">
-                    <div
-                      className="h-1.5 rounded-full bg-lime-400"
-                      style={{ width: `${Number(step.n) * 33}%` }}
-                    />
-                  </div>
-                </div>
+                  </Link>
+                ))}
               </div>
-            ))}
-          </div>
-        </section>
+            )}
+          </form>
 
-        {/* Recent posts */}
-        <section className="pb-24">
-          <div className={SHELL}>
-            <div className="mb-6 flex items-end justify-between">
-              <h2 className="text-xl font-semibold">Recent Updates</h2>
+          <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
+            {quickLinks.map((link) => (
               <Link
-                href="/blog"
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                key={link.label}
+                href={link.href}
+                className="transition-colors hover:text-foreground"
               >
-                View all <ArrowRight className="h-3.5 w-3.5" />
+                {link.label}
               </Link>
-            </div>
-
-            <div className="divide-y divide-border border-y border-border">
-              {POSTS.map((post) => (
-                <div
-                  key={post.title}
-                  className="flex flex-col gap-4 py-5 sm:flex-row sm:items-start sm:justify-between"
-                >
-                  <div className="flex flex-1 gap-4">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={post.image}
-                      alt=""
-                      className="h-16 w-16 shrink-0 rounded-lg object-cover sm:h-20 sm:w-20"
-                    />
-                    <div className="sm:max-w-lg">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-medium">{post.title}</h3>
-                        {post.isNew && (
-                          <Badge className="bg-lime-400/20 text-lime-700 dark:text-lime-300 hover:bg-lime-400/20">
-                            New
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {post.description}
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-sm text-muted-foreground">{post.date}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-border py-14">
-        <div className={`${SHELL} grid grid-cols-2 gap-8 sm:grid-cols-4 md:grid-cols-5`}>
-          <div className="col-span-2 sm:col-span-4 md:col-span-1">
-            <Link href="/" className="flex items-center gap-2 font-semibold">
-              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-lime-400 text-black">
-                <BookOpen className="h-3.5 w-3.5" />
-              </div>
-              edutun
-            </Link>
-            <p className="mt-3 text-sm text-muted-foreground">
-              © 2026 EduTun, Inc.
-            </p>
-          </div>
-
-          <div>
-            <h4 className="text-sm font-medium text-foreground">Product</h4>
-            <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
-              <li><Link href="/courses" className="hover:text-foreground">Courses</Link></li>
-              <li><Link href="/rankings" className="hover:text-foreground">Rankings</Link></li>
-              <li><Link href="/exams" className="hover:text-foreground">Past exams</Link></li>
-              <li><Link href="/pricing" className="hover:text-foreground">Pricing</Link></li>
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="text-sm font-medium text-foreground">Company</h4>
-            <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
-              <li><Link href="/about" className="hover:text-foreground">About</Link></li>
-              <li><Link href="/blog" className="hover:text-foreground">Blog</Link></li>
-              <li><Link href="/careers" className="hover:text-foreground">Careers</Link></li>
-              <li><Link href="/contact" className="hover:text-foreground">Contact</Link></li>
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="text-sm font-medium text-foreground">Support</h4>
-            <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
-              <li><Link href="/help" className="hover:text-foreground">Help center</Link></li>
-              <li><Link href="/teachers" className="hover:text-foreground">For teachers</Link></li>
-              <li><Link href="/terms" className="hover:text-foreground">Terms</Link></li>
-              <li><Link href="/privacy" className="hover:text-foreground">Privacy</Link></li>
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="text-sm font-medium text-foreground">Connect</h4>
-            <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
-              <li><Link href="#" className="hover:text-foreground">Discord</Link></li>
-              <li><Link href="#" className="hover:text-foreground">Instagram</Link></li>
-              <li><Link href="#" className="hover:text-foreground">Facebook</Link></li>
-              <li><Link href="#" className="hover:text-foreground">YouTube</Link></li>
-            </ul>
+            ))}
           </div>
         </div>
-      </footer>
-    </div>
+      </section>
+
+      {/* The board */}
+      <section className="border-b border-border">
+        <div className="mx-auto max-w-5xl px-6 py-10">
+          {board.map((course) => (
+            <Link
+              key={course.id}
+              href={`/courses/${course.id}`}
+              className="grid grid-cols-[3px_1fr_auto] items-center gap-4 border-b border-border py-4 transition-colors last:border-b-0 hover:bg-muted/50 sm:grid-cols-[3px_1fr_auto_auto_auto] sm:gap-6 sm:px-3"
+            >
+              <span className={`h-10 w-[3px] rounded-full ${accentBar[course.accent as Accent]}`} />
+
+              <span className="min-w-0">
+                <span className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="font-medium">{course.title}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {course.nextChapter}
+                  </span>
+                </span>
+                <span className="mt-0.5 block text-sm text-muted-foreground">
+                  {course.prof} · {course.role}
+                </span>
+              </span>
+
+              <span className="hidden shrink-0 text-sm text-muted-foreground sm:block">
+                {course.level}
+              </span>
+
+              <span className="hidden shrink-0 items-center gap-1 text-sm text-muted-foreground sm:flex">
+                <Clock3 className="h-3.5 w-3.5" />
+                {course.duration}
+              </span>
+
+              <span className="flex shrink-0 items-center gap-1 text-sm font-medium">
+                <Star className="h-3.5 w-3.5 fill-current" />
+                {course.rating}
+              </span>
+            </Link>
+          ))}
+
+          <div className="pt-6">
+            <Link
+              href="/courses"
+              className="flex items-center gap-1 text-sm font-medium text-primary"
+            >
+              Voir tout le catalogue
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* For teachers */}
+      <section className="border-b border-border bg-foreground text-background">
+        <div className="mx-auto grid max-w-5xl gap-10 px-6 py-16 sm:py-20 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div className="max-w-xl">
+            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+              Vous savez expliquer. Partagez-le.
+            </h2>
+
+            <p className="mt-4 text-sm leading-7 text-background/70 sm:text-base">
+              Structurez vos cours en chapitres, suivez la progression de vos
+              élèves, et touchez des apprenants bien au-delà de votre salle de
+              classe — du collège à la formation pour adultes.
+            </p>
+
+            <ul className="mt-6 space-y-3 text-sm text-background/80">
+              <li className="flex gap-3">
+                <PenLine className="mt-0.5 h-4 w-4 shrink-0" />
+                Publiez à votre rythme, chapitre par chapitre.
+              </li>
+              <li className="flex gap-3">
+                <PenLine className="mt-0.5 h-4 w-4 shrink-0" />
+                Gardez la main sur votre contenu et vos tarifs.
+              </li>
+              <li className="flex gap-3">
+                <PenLine className="mt-0.5 h-4 w-4 shrink-0" />
+                Suivez la progression réelle de chaque élève.
+              </li>
+            </ul>
+          </div>
+
+          <div className="lg:justify-self-end">
+            <Button asChild size="lg" variant="secondary">
+              <Link href="/devenir-professeur">
+                Devenir professeur sur Curio
+                <ArrowRight className="ml-1.5 h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* Final CTA */}
+      <section className="mx-auto max-w-5xl px-6 py-16 sm:py-20">
+        <div className="flex flex-col items-start gap-6 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+              Prêt à commencer ?
+            </h2>
+            <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+              Un premier chapitre gratuit, quel que soit votre âge ou votre
+              point de départ.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <Button asChild size="lg">
+              <Link href="/courses">
+                Commencer à apprendre
+                <ArrowRight className="ml-1.5 h-4 w-4" />
+              </Link>
+            </Button>
+
+            <Button asChild size="lg" variant="outline">
+              <Link href="/devenir-professeur">Devenir professeur</Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+    </main>
   );
 }

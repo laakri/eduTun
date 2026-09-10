@@ -256,6 +256,10 @@ export function getBunnyCdnUrl(storageKey: string) {
   return `https://${cdnHost}/${storageKey}`;
 }
 
+export function getBunnyStorageProxyUrl(storageKey: string) {
+  return `/api/media?key=${encodeURIComponent(storageKey)}`;
+}
+
 export async function deleteFromBunnyStorage(storageKey: string) {
   const { zone, key } = requireStorageConfig();
 

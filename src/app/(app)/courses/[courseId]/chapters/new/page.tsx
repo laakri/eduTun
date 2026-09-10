@@ -776,7 +776,6 @@ export default function NewChapterPage() {
               <Button type="submit" disabled={locked}>
                 {phase === "creating" && "Creating chapter…"}
                 {phase === "uploading" && `Uploading… ${uploadPct}%`}
-                {phase === "processing" && "Processing…"}
                 {(phase === "idle" || phase === "error") && "Create chapter"}
               </Button>
             )}
