@@ -2,10 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Check, Layers, PackageOpen, Sparkles } from "lucide-react";
+import { Check, Loader2, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 
 type SubscriptionPlan = {
   id: string;
@@ -23,200 +22,347 @@ type SubscriptionPlan = {
 };
 
 const billingCycles = [
-  { value: "month", label: "1 month" },
-  { value: "quarter", label: "3 months" },
-  { value: "year", label: "Full year" },
+  {
+    value: "month",
+    label: "Monthly",
+  },
+  {
+    value: "quarter",
+    label: "3 months",
+  },
+  {
+    value: "year",
+    label: "Yearly",
+  },
 ] as const;
 
+type BillingCycle = (typeof billingCycles)[number]["value"];
+
 function formatPrice(priceCents: number) {
-  return priceCents > 0 ? `${(priceCents / 100).toFixed(2)} TND` : "Free";
+  if (priceCents === 0) return "Free";
+
+  return `${(priceCents / 100).toFixed(2)} TND`;
+}
+
+function getPrice(plan: SubscriptionPlan, cycle: BillingCycle) {
+  switch (cycle) {
+    case "quarter":
+      return plan.quarterlyPriceCents;
+    case "year":
+      return plan.yearlyPriceCents;
+    default:
+      return plan.monthlyPriceCents;
+  }
+}
+
+function getPeriodLabel(cycle: BillingCycle) {
+  switch (cycle) {
+    case "quarter":
+      return "3 months";
+    case "year":
+      return "year";
+    default:
+      return "month";
+  }
 }
 
 export default function PacksPage() {
   const router = useRouter();
+
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedCycle, setSelectedCycle] =
+    useState<BillingCycle>("month");
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
-  const [selectedCycle, setSelectedCycle] = useState<(typeof billingCycles)[number]["value"]>("month");
-  const [subscribing, setSubscribing] = useState(false);
+  const [subscribingPlanId, setSubscribingPlanId] = useState<string | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/subscriptions")
-      .then(async (response) => {
+    async function loadPlans() {
+      try {
+        const response = await fetch("/api/subscriptions");
+
         const json = await response.json();
-        if (!response.ok) throw new Error(json.error?.message ?? "Unable to load subscriptions.");
-        const nextPlans = json.data?.plans ?? [];
+
+        if (!response.ok) {
+          throw new Error(
+            json.error?.message ?? "Unable to load subscription plans.",
+          );
+        }
+
+        const nextPlans: SubscriptionPlan[] = json.data?.plans ?? [];
+
         setPlans(nextPlans);
-        if (nextPlans[0]) setSelectedPlanId(nextPlans[0].id);
-      })
-      .catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to load subscriptions."))
-      .finally(() => setLoading(false));
+
+        if (nextPlans.length > 0) {
+          setSelectedPlanId(nextPlans[0].id);
+        }
+      } catch (reason) {
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Unable to load subscription plans.",
+        );
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadPlans();
   }, []);
 
   const selectedPlan = useMemo(
-    () => plans.find((plan) => plan.id === selectedPlanId) ?? plans[0] ?? null,
+    () =>
+      plans.find((plan) => plan.id === selectedPlanId) ??
+      plans[0] ??
+      null,
     [plans, selectedPlanId],
   );
 
-  const currentPrice = selectedPlan
-    ? selectedCycle === "month"
-      ? selectedPlan.monthlyPriceCents
-      : selectedCycle === "quarter"
-        ? selectedPlan.quarterlyPriceCents
-        : selectedPlan.yearlyPriceCents
-    : 0;
-
-  async function subscribe() {
-    if (!selectedPlan) return;
-
+  async function subscribe(plan: SubscriptionPlan) {
     setError(null);
-    setSuccess(null);
-    setSubscribing(true);
+    setSubscribingPlanId(plan.id);
 
     try {
       const response = await fetch("/api/subscriptions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
-          planId: selectedPlan.id,
+          planId: plan.id,
           billingCycle: selectedCycle,
         }),
       });
 
       const json = await response.json().catch(() => ({}));
+
       if (!response.ok) {
-        throw new Error(json.error?.message ?? "Could not activate this subscription.");
+        throw new Error(
+          json.error?.message ?? "Could not activate this subscription.",
+        );
       }
 
-      setSuccess(`Your ${selectedPlan.name} subscription is now active.`);
       router.push("/learn");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not activate this subscription.");
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not activate this subscription.",
+      );
     } finally {
-      setSubscribing(false);
+      setSubscribingPlanId(null);
     }
   }
 
   return (
     <main className="min-h-[calc(100svh-56px)] bg-background text-foreground">
-      <div className="mx-auto max-w-6xl px-6 py-10">
-        <div className="mb-8 flex items-center gap-2 text-sm text-primary">
-          <Layers className="h-4 w-4" />
-          Subscription plans
+      <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 lg:px-10">
+        {/* Header */}
+        <div className="mx-auto max-w-2xl text-center">
+
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+            Choose your learning pack
+          </h1>
+
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-muted-foreground sm:text-base">
+            Pick the plan that fits your learning goals. You can change your
+            pack whenever you want.
+          </p>
         </div>
 
+        {/* Billing selector */}
+        <div className="mt-8 flex justify-center">
+          <div className="inline-flex rounded-xl border border-border bg-muted/40 p-1">
+            {billingCycles.map((cycle) => {
+              const active = selectedCycle === cycle.value;
+
+              return (
+                <button
+                  key={cycle.value}
+                  type="button"
+                  onClick={() => setSelectedCycle(cycle.value)}
+                  className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                    active
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {cycle.label}
+
+                  {cycle.value === "year" && (
+                    <span className="ml-1.5 text-xs text-primary">
+                      Save
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {error && (
+          <div className="mx-auto mt-6 max-w-2xl rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-center text-sm text-destructive">
+            {error}
+          </div>
+        )}
+
+        {/* Plans */}
         {loading ? (
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <div className="mx-auto mt-12 grid max-w-6xl gap-5 md:grid-cols-2 lg:grid-cols-3">
             {[0, 1, 2].map((index) => (
-              <div key={index} className="h-72 animate-pulse rounded-2xl bg-muted" />
+              <div
+                key={index}
+                className="h-[460px] animate-pulse rounded-2xl bg-muted"
+              />
             ))}
           </div>
         ) : plans.length === 0 ? (
-          <div className="mt-10 flex flex-col items-center gap-3 rounded-lg border border-dashed border-border p-14 text-center text-muted-foreground">
-            <PackageOpen className="h-6 w-6" />
-            <p className="text-sm">No subscription plans are available yet. Please check back soon.</p>
+          <div className="mx-auto mt-12 max-w-lg rounded-2xl border border-border p-10 text-center">
+            <p className="text-sm text-muted-foreground">
+              No subscription packs are available right now.
+            </p>
           </div>
         ) : (
-          <div className="grid gap-8 xl:grid-cols-[1.2fr_0.8fr]">
-            <div className="space-y-5">
-              {plans.map((plan) => {
-                const isSelected = selectedPlanId === plan.id;
-                return (
-                  <Card
-                    key={plan.id}
-                    className={`cursor-pointer border-2 p-5 transition ${
-                      isSelected ? "border-primary bg-primary/5" : "border-border bg-card"
-                    }`}
-                    onClick={() => setSelectedPlanId(plan.id)}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.16em] text-primary">{plan.domain.name}</p>
-                        <h2 className="mt-2 text-2xl font-semibold">{plan.name}</h2>
-                      </div>
-                      {isSelected && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-                          <Check className="h-3.5 w-3.5" /> Selected
+          <div
+            className={`mx-auto mt-12 grid max-w-6xl gap-5 ${
+              plans.length === 1
+                ? "max-w-md"
+                : plans.length === 2
+                  ? "max-w-4xl md:grid-cols-2"
+                  : "lg:grid-cols-3"
+            }`}
+          >
+            {plans.map((plan, index) => {
+              const price = getPrice(plan, selectedCycle);
+              const isSelected = selectedPlan?.id === plan.id;
+              const isPopular =
+                plans.length >= 3 && index === Math.floor(plans.length / 2);
+              const isSubscribing = subscribingPlanId === plan.id;
+
+              return (
+                <div
+                  key={plan.id}
+                  onClick={() => setSelectedPlanId(plan.id)}
+                  className={`relative flex cursor-pointer flex-col rounded-2xl border p-6 transition-all duration-200 ${
+                    isPopular
+                      ? "border-primary shadow-lg shadow-primary/10"
+                      : isSelected
+                        ? "border-primary/50"
+                        : "border-border"
+                  } ${
+                    isSelected
+                      ? "bg-card"
+                      : "bg-card/50 hover:border-primary/30 hover:bg-card"
+                  }`}
+                >
+                  {/* Popular badge */}
+                  {isPopular && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">
+                      Most popular
+                    </div>
+                  )}
+
+                  {/* Pack header */}
+                  <div>
+                    <p className="text-sm font-medium text-primary">
+                      {plan.domain.name}
+                    </p>
+
+                    <h2 className="mt-3 text-2xl font-semibold tracking-tight">
+                      {plan.name}
+                    </h2>
+
+                    <p className="mt-2 min-h-12 text-sm leading-5 text-muted-foreground">
+                      {plan.description ??
+                        "Everything you need to keep learning and improving."}
+                    </p>
+                  </div>
+
+                  {/* Price */}
+                  <div className="mt-7">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-4xl font-semibold tracking-tight">
+                        {formatPrice(price)}
+                      </span>
+
+                      {price > 0 && (
+                        <span className="text-sm text-muted-foreground">
+                          / {getPeriodLabel(selectedCycle)}
                         </span>
                       )}
                     </div>
-                    <p className="mt-3 text-sm text-muted-foreground">{plan.description}</p>
-                    <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                      <div className="rounded-xl border border-border bg-background p-3">
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">1 month</p>
-                        <p className="mt-2 text-lg font-semibold">{formatPrice(plan.monthlyPriceCents)}</p>
-                      </div>
-                      <div className="rounded-xl border border-border bg-background p-3">
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">3 months</p>
-                        <p className="mt-2 text-lg font-semibold">{formatPrice(plan.quarterlyPriceCents)}</p>
-                      </div>
-                      <div className="rounded-xl border border-border bg-background p-3">
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Full year</p>
-                        <p className="mt-2 text-lg font-semibold">{formatPrice(plan.yearlyPriceCents)}</p>
-                      </div>
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
+                  </div>
 
-            <aside className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-              <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary">
-                <Sparkles className="h-3.5 w-3.5" />
-                Billing
-              </div>
+                  {/* Divider */}
+                  <div className="my-6 h-px bg-border" />
 
-              <h3 className="mt-4 text-2xl font-semibold">{selectedPlan?.name ?? "Choose a plan"}</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {selectedPlan?.description ?? "Select a domain to begin your subscription."}
-              </p>
+                  {/* Features */}
+                  <div className="flex-1">
+                    <p className="mb-4 text-sm font-medium">
+                      This pack includes:
+                    </p>
 
-              <div className="mt-5 space-y-2">
-                {billingCycles.map((cycle) => (
-                  <button
-                    key={cycle.value}
-                    type="button"
-                    onClick={() => setSelectedCycle(cycle.value)}
-                    className={`flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left text-sm transition ${
-                      selectedCycle === cycle.value
-                        ? "border-primary bg-primary/5 text-foreground"
-                        : "border-border bg-background text-muted-foreground hover:border-primary/40"
+                    <ul className="space-y-3">
+                      <li className="flex gap-3 text-sm text-muted-foreground">
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                        Access to included courses
+                      </li>
+
+                      <li className="flex gap-3 text-sm text-muted-foreground">
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                        Learn at your own pace
+                      </li>
+
+                      <li className="flex gap-3 text-sm text-muted-foreground">
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                        Course progress tracking
+                      </li>
+
+                      <li className="flex gap-3 text-sm text-muted-foreground">
+                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                        Access for the selected period
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* CTA */}
+                  <Button
+                    className={`mt-8 h-11 w-full rounded-xl ${
+                      isPopular
+                        ? ""
+                        : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
                     }`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      subscribe(plan);
+                    }}
+                    disabled={isSubscribing}
                   >
-                    <span>{cycle.label}</span>
-                    <span className="font-medium text-foreground">
-                      {selectedPlan
-                        ? formatPrice(
-                            cycle.value === "month"
-                              ? selectedPlan.monthlyPriceCents
-                              : cycle.value === "quarter"
-                                ? selectedPlan.quarterlyPriceCents
-                                : selectedPlan.yearlyPriceCents,
-                          )
-                        : "—"}
-                    </span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="mt-6 rounded-xl border border-border bg-muted/30 p-4">
-                <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Total</p>
-                <div className="mt-2 flex items-end justify-between gap-3">
-                  <span className="text-3xl font-semibold">{formatPrice(currentPrice)}</span>
-                  <span className="text-xs text-muted-foreground">/{selectedCycle === "month" ? "month" : selectedCycle === "quarter" ? "3 months" : "year"}</span>
+                    {isSubscribing ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Activating...
+                      </>
+                    ) : isSelected ? (
+                      "Get started"
+                    ) : (
+                      "Choose pack"
+                    )}
+                  </Button>
                 </div>
-              </div>
-
-              {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
-              {success && <p className="mt-4 text-sm text-primary">{success}</p>}
-
-              <Button className="mt-6 w-full" onClick={subscribe} disabled={!selectedPlan || subscribing}>
-                {subscribing ? "Activating..." : "Subscribe now"}
-              </Button>
-            </aside>
+              );
+            })}
           </div>
+        )}
+
+        {/* Bottom note */}
+        {!loading && plans.length > 0 && (
+          <p className="mx-auto mt-8 max-w-xl text-center text-xs text-muted-foreground">
+            You can select a different billing period above before subscribing.
+          </p>
         )}
       </div>
     </main>

@@ -15,6 +15,7 @@ const feedbackSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("comment"),
     body: z.string().trim().min(1).max(1000),
+    parentId: z.string().cuid().nullable().optional(),
   }),
 ]);
 
@@ -24,6 +25,7 @@ export const GET = withErrorHandler(
     const session = await auth();
     const chapter = await db.chapter.findUnique({
       where: { id },
+      select: { course: { select: { profId: true } } },
     });
     if (!chapter) throw new NotFoundError("Chapter");
 
@@ -31,8 +33,17 @@ export const GET = withErrorHandler(
       db.chapterComment.findMany({
         where: { chapterId: id },
         orderBy: { createdAt: "desc" },
-        take: 50,
-        include: { user: { select: { fullName: true, avatarUrl: true } } },
+        take: 100,
+        include: {
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              avatarUrl: true,
+              roles: { select: { role: { select: { slug: true } } } },
+            },
+          },
+        },
       }),
       db.chapterVote.findMany({
         where: { chapterId: id },
@@ -53,9 +64,24 @@ export const GET = withErrorHandler(
       viewerVote: viewerVote?.value ?? 0,
       comments: comments.map((comment) => ({
         id: comment.id,
+        parentId: comment.parentId,
         body: comment.body,
         createdAt: comment.createdAt,
-        user: comment.user,
+        editedAt:
+          comment.updatedAt.getTime() !== comment.createdAt.getTime()
+            ? comment.updatedAt
+            : null,
+        canEdit:
+          session?.user?.id === comment.userId ||
+          session?.user?.roles?.includes("admin") === true,
+        isProfessor: comment.user.roles.some(
+          ({ role }) => role.slug === "prof",
+        ),
+        isCourseOwner: comment.user.id === chapter.course.profId,
+        user: {
+          fullName: comment.user.fullName,
+          avatarUrl: comment.user.avatarUrl,
+        },
       })),
     });
   },
@@ -90,10 +116,52 @@ export const POST = withErrorHandler(
     }
 
     if (!body.body) throw new ValidationError("Comment cannot be empty.");
+    if (body.parentId) {
+      const parent = await db.chapterComment.findFirst({
+        where: { id: body.parentId, chapterId: id },
+        select: { id: true },
+      });
+      if (!parent) throw new ValidationError("The comment you are replying to was not found.");
+    }
     const comment = await db.chapterComment.create({
-      data: { chapterId: id, userId: user.id, body: body.body },
-      include: { user: { select: { fullName: true, avatarUrl: true } } },
+      data: {
+        chapterId: id,
+        userId: user.id,
+        body: body.body,
+        parentId: body.parentId ?? null,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            roles: { select: { role: { select: { slug: true } } } },
+          },
+        },
+      },
     });
-    return ok({ type: "comment", comment }, 201);
+    return ok(
+      {
+        type: "comment",
+        comment: {
+          id: comment.id,
+          parentId: comment.parentId,
+          body: comment.body,
+          createdAt: comment.createdAt,
+          editedAt: null,
+          canEdit: true,
+          isProfessor: comment.user.roles.some(
+            ({ role }) => role.slug === "prof",
+          ),
+          isCourseOwner: comment.user.id === chapter.course.profId,
+          user: {
+            fullName: comment.user.fullName,
+            avatarUrl: comment.user.avatarUrl,
+          },
+        },
+      },
+      201,
+    );
   },
 );

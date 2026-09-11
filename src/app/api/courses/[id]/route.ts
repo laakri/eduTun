@@ -8,6 +8,7 @@ import { NotFoundError, ValidationError } from "@/lib/errors";
 import {
   getBunnyCdnUrl,
   getBunnyEmbedUrl,
+  getBunnyVideoStatus,
   deleteBunnyVideo,
   deleteFromBunnyStorage,
 } from "@/lib/bunny";
@@ -88,12 +89,43 @@ export const PATCH = withErrorHandler(
     if (body.published === true) {
       const chapters = await db.chapter.findMany({
         where: { courseId: id },
-        select: { title: true, videoStatus: true },
+        select: { id: true, title: true, videoId: true, videoStatus: true },
       });
       if (chapters.length === 0) {
         throw new NotFoundError("Chapter");
       }
-      const blockedChapter = chapters.find(
+
+      const liveStatuses = await Promise.all(
+        chapters.map(async (chapter) => {
+          try {
+            const status = await getBunnyVideoStatus(chapter.videoId);
+            const videoStatus = status.failed
+              ? VideoStatus.FAILED
+              : status.ready
+                ? VideoStatus.READY
+                : VideoStatus.PROCESSING;
+
+            await db.chapter.update({
+              where: { id: chapter.id },
+              data: {
+                videoStatus,
+                ready: videoStatus === VideoStatus.READY,
+                ...(status.durationSeconds
+                  ? { durationSeconds: status.durationSeconds }
+                  : {}),
+              },
+            });
+
+            return { ...chapter, videoStatus };
+          } catch {
+            throw new ValidationError(
+              `Could not verify the Bunny video for "${chapter.title}". Try again shortly.`,
+            );
+          }
+        }),
+      );
+
+      const blockedChapter = liveStatuses.find(
         (chapter) => chapter.videoStatus !== VideoStatus.READY,
       );
       if (blockedChapter) {

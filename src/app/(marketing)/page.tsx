@@ -2,13 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import {
-  ArrowRight,
-  Clock3,
-  PenLine,
-  Search,
-  Star,
-} from "lucide-react";
+import { ArrowRight, PenLine, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,105 +14,67 @@ import { Input } from "@/components/ui/input";
 const quickLinks = [
   { label: "Sciences", href: "/courses?category=Sciences" },
   { label: "Langues", href: "/courses?category=Langues" },
-  { label: "Sciences humaines", href: "/courses?category=Sciences+humaines" },
-  { label: "Vie professionnelle", href: "/courses?category=Professionnel" },
+  {
+    label: "Sciences humaines",
+    href: "/courses?category=Sciences+humaines",
+  },
+  {
+    label: "Vie professionnelle",
+    href: "/courses?category=Professionnel",
+  },
 ];
 
-const board = [
+const bacTracks = [
   {
-    id: "maths-fonctions",
-    prof: "Sami Bouzid",
-    role: "Professeur de mathématiques",
-    title: "Fonctions et suites numériques",
-    nextChapter: "Chapitre 4 : la fonction dérivée",
-    level: "Lycée",
-    chapters: 12,
-    duration: "3 h 45",
-    rating: 4.9,
-    accent: "ochre",
+    id: "bac-math",
+    title: "Bac Mathématiques",
+    short: "Math",
+    description: "Maths · Physique · Informatique",
+    courses: 34,
+    students: 1280,
   },
   {
-    id: "corps-humain",
-    prof: "Ines Rekik",
-    role: "Professeure de sciences",
-    title: "Le corps humain, en détail",
-    nextChapter: "Chapitre 2 : le système digestif",
-    level: "Collège",
-    chapters: 6,
-    duration: "1 h 50",
-    rating: 4.8,
-    accent: "ochre",
+    id: "bac-sciences",
+    title: "Bac Sciences expérimentales",
+    short: "Sciences",
+    description: "SVT · Physique · Chimie",
+    courses: 42,
+    students: 1640,
   },
   {
-    id: "francais-commentaire",
-    prof: "Amira Sassi",
-    role: "Professeure de lettres",
-    title: "Maîtriser le commentaire composé",
-    nextChapter: "Chapitre 2 : construire un plan",
-    level: "Lycée",
-    chapters: 9,
-    duration: "2 h 20",
-    rating: 4.8,
-    accent: "teal",
+    id: "bac-info",
+    title: "Bac Sciences de l'informatique",
+    short: "Info",
+    description: "Programmation · Algo · Systèmes",
+    courses: 29,
+    students: 970,
   },
   {
-    id: "anglais-pro",
-    prof: "Nadia Kort",
-    role: "Formatrice en langues",
-    title: "Anglais professionnel : présenter son travail",
-    nextChapter: "Chapitre 1 : se présenter en réunion",
-    level: "Adultes",
-    chapters: 7,
-    duration: "2 h 10",
-    rating: 4.9,
-    accent: "teal",
+    id: "bac-technique",
+    title: "Bac Technique",
+    short: "Technique",
+    description: "Technique · Maths · Physique",
+    courses: 26,
+    students: 820,
   },
   {
-    id: "philo-conscience",
-    prof: "Mehdi Ouali",
-    role: "Professeur de philosophie",
-    title: "La conscience",
-    nextChapter: "Chapitre 5 : la conscience de soi",
-    level: "Lycée",
-    chapters: 8,
-    duration: "2 h 50",
-    rating: 4.7,
-    accent: "ink",
+    id: "bac-economie",
+    title: "Bac Économie & Gestion",
+    short: "Économie",
+    description: "Économie · Gestion · Maths",
+    courses: 31,
+    students: 1130,
   },
   {
-    id: "excel-debutant",
-    prof: "Karim Trabelsi",
-    role: "Formateur bureautique",
-    title: "Excel : les bases pour bien démarrer",
-    nextChapter: "Chapitre 3 : les formules simples",
-    level: "Adultes",
-    chapters: 10,
-    duration: "3 h 00",
-    rating: 4.7,
-    accent: "umber",
+    id: "bac-lettres",
+    title: "Bac Lettres",
+    short: "Lettres",
+    description: "Français · Philosophie · Arabe",
+    courses: 24,
+    students: 760,
   },
-  {
-    id: "python-debutant",
-    prof: "Youssef Ben Ali",
-    role: "Formateur en informatique",
-    title: "Premiers pas avec Python",
-    nextChapter: "Chapitre 1 : variables et types",
-    level: "Adultes",
-    chapters: 11,
-    duration: "3 h 20",
-    rating: 4.9,
-    accent: "umber",
-  },
+  
 ] as const;
-
-type Accent = "ochre" | "teal" | "umber" | "ink";
-
-const accentBar: Record<Accent, string> = {
-  ochre: "bg-[#C8872E]",
-  teal: "bg-[#1F4F47]",
-  umber: "bg-[#6B4F3A]",
-  ink: "bg-foreground/60",
-};
 
 // ---------------------------------------------------------------------------
 // Page
@@ -126,25 +82,48 @@ const accentBar: Record<Accent, string> = {
 
 export default function HomePage() {
   const [professorQuery, setProfessorQuery] = useState("");
+
   const [professors, setProfessors] = useState<
-    Array<{ id: string; fullName: string; courseCount: number }>
+    Array<{
+      id: string;
+      fullName: string;
+      courseCount: number;
+    }>
   >([]);
 
   useEffect(() => {
     const query = professorQuery.trim();
+
     if (query.length < 2) {
       setProfessors([]);
       return;
     }
 
     const controller = new AbortController();
+
     const timeout = window.setTimeout(() => {
       fetch(`/api/professors?q=${encodeURIComponent(query)}`, {
         signal: controller.signal,
       })
-        .then((response) => response.json())
-        .then((json) => setProfessors(json.data ?? []))
-        .catch(() => setProfessors([]));
+        .then(async (response) => {
+          if (!response.ok) {
+            setProfessors([]);
+            return;
+          }
+
+          const json: {
+            data?: Array<{
+              id: string;
+              fullName: string;
+              courseCount: number;
+            }>;
+          } = await response.json();
+
+          setProfessors(json.data ?? []);
+        })
+        .catch(() => {
+          setProfessors([]);
+        });
     }, 250);
 
     return () => {
@@ -153,11 +132,15 @@ export default function HomePage() {
     };
   }, [professorQuery]);
 
-  const visibleProfessors = professorQuery.trim().length >= 2 ? professors : [];
+  const visibleProfessors =
+    professorQuery.trim().length >= 2 ? professors : [];
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      {/* Search */}
+      {/* ----------------------------------------------------------------- */}
+      {/* Search                                                           */}
+      {/* ----------------------------------------------------------------- */}
+
       <section className="border-b border-border">
         <div className="mx-auto max-w-5xl px-6 pb-10 pt-14 sm:pt-16">
           <h1 className="max-w-2xl text-3xl font-semibold leading-tight tracking-tight sm:text-4xl">
@@ -165,7 +148,11 @@ export default function HomePage() {
             moment.
           </h1>
 
-          <form action="/courses" method="get" className="relative mt-6 max-w-xl">
+          <form
+            action="/courses"
+            method="get"
+            className="relative mt-6 max-w-xl"
+          >
             <div className="flex items-stretch rounded-md border border-border bg-card">
               <div className="flex items-center pl-4">
                 <Search className="h-4 w-4 text-muted-foreground" />
@@ -174,7 +161,9 @@ export default function HomePage() {
               <Input
                 name="q"
                 value={professorQuery}
-                onChange={(event) => setProfessorQuery(event.target.value)}
+                onChange={(event) =>
+                  setProfessorQuery(event.target.value)
+                }
                 placeholder="Ex : Sami Bouzid, dérivées, Excel..."
                 className="h-12 border-0 bg-transparent shadow-none focus-visible:ring-0"
               />
@@ -189,6 +178,7 @@ export default function HomePage() {
                 <p className="border-b border-border px-4 py-2 text-xs text-muted-foreground">
                   Professeurs correspondants
                 </p>
+
                 {visibleProfessors.map((professor) => (
                   <Link
                     key={professor.id}
@@ -197,6 +187,7 @@ export default function HomePage() {
                     className="flex items-center justify-between px-4 py-3 text-sm transition-colors hover:bg-muted"
                   >
                     <span>{professor.fullName}</span>
+
                     <span className="text-xs text-muted-foreground">
                       {professor.courseCount} cours
                     </span>
@@ -220,58 +211,88 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* The board */}
+      {/* ----------------------------------------------------------------- */}
+      {/* Tunisian Baccalaureate sections                                  */}
+      {/* ----------------------------------------------------------------- */}
+
       <section className="border-b border-border">
-        <div className="mx-auto max-w-5xl px-6 py-10">
-          {board.map((course) => (
-            <Link
-              key={course.id}
-              href={`/courses/${course.id}`}
-              className="grid grid-cols-[3px_1fr_auto] items-center gap-4 border-b border-border py-4 transition-colors last:border-b-0 hover:bg-muted/50 sm:grid-cols-[3px_1fr_auto_auto_auto] sm:gap-6 sm:px-3"
-            >
-              <span className={`h-10 w-[3px] rounded-full ${accentBar[course.accent as Accent]}`} />
+        <div className="mx-auto max-w-5xl px-6 py-14 sm:py-16">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight sm:text-2xl">
+                Préparez votre Bac
+              </h2>
 
-              <span className="min-w-0">
-                <span className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="font-medium">{course.title}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {course.nextChapter}
-                  </span>
-                </span>
-                <span className="mt-0.5 block text-sm text-muted-foreground">
-                  {course.prof} · {course.role}
-                </span>
-              </span>
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                Choisissez votre section et retrouvez les cours adaptés à
+                votre programme.
+              </p>
+            </div>
 
-              <span className="hidden shrink-0 text-sm text-muted-foreground sm:block">
-                {course.level}
-              </span>
-
-              <span className="hidden shrink-0 items-center gap-1 text-sm text-muted-foreground sm:flex">
-                <Clock3 className="h-3.5 w-3.5" />
-                {course.duration}
-              </span>
-
-              <span className="flex shrink-0 items-center gap-1 text-sm font-medium">
-                <Star className="h-3.5 w-3.5 fill-current" />
-                {course.rating}
-              </span>
-            </Link>
-          ))}
-
-          <div className="pt-6">
             <Link
               href="/courses"
-              className="flex items-center gap-1 text-sm font-medium text-primary"
+              className="flex shrink-0 items-center gap-1 text-sm font-medium text-primary"
             >
-              Voir tout le catalogue
+              Tous les cours
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
+          </div>
+
+          <div className="mt-8 grid grid-cols-1 divide-y divide-border border-y border-border sm:grid-cols-2 sm:divide-x lg:grid-cols-3">
+            {bacTracks.map((track, index) => (
+              <Link
+                key={track.id}
+                href={`/courses?level=bac&track=${encodeURIComponent(
+                  track.short,
+                )}`}
+                className="group relative flex min-h-[180px] flex-col px-1 py-6 transition-colors hover:bg-muted/40 sm:px-6"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[11px] text-muted-foreground/70">
+                    N&deg;&nbsp;{String(index + 1).padStart(2, "0")}
+                  </span>
+
+                  <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/50 transition-transform duration-200 group-hover:translate-x-1 group-hover:text-foreground" />
+                </div>
+
+                <div className="mt-5">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    {track.short}
+                  </p>
+
+                  <h3 className="mt-1.5 text-[15px] font-medium leading-snug">
+                    {track.title}
+                  </h3>
+
+                  <p className="mt-1.5 text-xs text-muted-foreground">
+                    {track.description}
+                  </p>
+                </div>
+
+                <div className="mt-auto flex items-end justify-between border-t border-border/70 pt-3 text-xs">
+                  <div>
+                    <span className="font-medium text-foreground">
+                      {track.courses}
+                    </span>{" "}
+                    <span className="text-muted-foreground">
+                      cours
+                    </span>
+                  </div>
+
+                  <span className="text-muted-foreground">
+                    {track.students.toLocaleString("fr-FR")} apprenants
+                  </span>
+                </div>
+              </Link>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* For teachers */}
+      {/* ----------------------------------------------------------------- */}
+      {/* For teachers                                                     */}
+      {/* ----------------------------------------------------------------- */}
+
       <section className="border-b border-border bg-foreground text-background">
         <div className="mx-auto grid max-w-5xl gap-10 px-6 py-16 sm:py-20 lg:grid-cols-[1fr_auto] lg:items-center">
           <div className="max-w-xl">
@@ -290,10 +311,12 @@ export default function HomePage() {
                 <PenLine className="mt-0.5 h-4 w-4 shrink-0" />
                 Publiez à votre rythme, chapitre par chapitre.
               </li>
+
               <li className="flex gap-3">
                 <PenLine className="mt-0.5 h-4 w-4 shrink-0" />
                 Gardez la main sur votre contenu et vos tarifs.
               </li>
+
               <li className="flex gap-3">
                 <PenLine className="mt-0.5 h-4 w-4 shrink-0" />
                 Suivez la progression réelle de chaque élève.
@@ -312,13 +335,17 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Final CTA */}
+      {/* ----------------------------------------------------------------- */}
+      {/* Final CTA                                                        */}
+      {/* ----------------------------------------------------------------- */}
+
       <section className="mx-auto max-w-5xl px-6 py-16 sm:py-20">
         <div className="flex flex-col items-start gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
               Prêt à commencer ?
             </h2>
+
             <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
               Un premier chapitre gratuit, quel que soit votre âge ou votre
               point de départ.
@@ -334,7 +361,9 @@ export default function HomePage() {
             </Button>
 
             <Button asChild size="lg" variant="outline">
-              <Link href="/devenir-professeur">Devenir professeur</Link>
+              <Link href="/devenir-professeur">
+                Devenir professeur
+              </Link>
             </Button>
           </div>
         </div>

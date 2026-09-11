@@ -6,6 +6,8 @@ const BUNNY_API_KEY = process.env.BUNNY_API_KEY!;
 const BUNNY_STORAGE_ZONE = process.env.BUNNY_STORAGE_ZONE_NAME;
 const BUNNY_STORAGE_KEY = process.env.BUNNY_STORAGE_API_KEY;
 const BUNNY_CDN_HOST = process.env.BUNNY_CDN_HOSTNAME;
+const BUNNY_STREAM_CDN_HOST =
+  process.env.BUNNY_STREAM_CDN_HOSTNAME ?? `vz-${BUNNY_LIBRARY_ID}.b-cdn.net`;
 
 type BunnyVideoResponse = {
   status: number;
@@ -178,7 +180,12 @@ export function getBunnyEmbedUrl(videoId: string) {
 
 /** Native Bunny Stream HLS manifest used by the student player. */
 export function getBunnyHlsUrl(videoId: string) {
-  return `https://vz-${BUNNY_LIBRARY_ID}.b-cdn.net/${videoId}/playlist.m3u8`;
+  const hostname = BUNNY_STREAM_CDN_HOST.replace(/^https?:\/\//, "").replace(
+    /\/$/,
+    "",
+  );
+
+  return `https://${hostname}/${videoId}/playlist.m3u8`;
 }
 
 /** Push our VideoSection rows to Bunny as player chapters (timestamps). */

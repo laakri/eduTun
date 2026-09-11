@@ -193,6 +193,7 @@ model Chapter {
   updatedAt       DateTime @updatedAt
   ready Boolean @default(false)
   videoStatus VideoStatus @default(PROCESSING)
+  published Boolean @default(false)
   
   course    Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
   progress  VideoProgress[]
@@ -237,14 +238,18 @@ model ChapterComment {
   id        String   @id @default(cuid())
   chapterId String
   userId    String
+  parentId  String?
   body      String   @db.Text
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent  ChapterComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies ChapterComment[]  @relation("CommentReplies")
 
   @@index([chapterId, createdAt])
+  @@index([parentId])
 }
 
 // Timestamp labels inside a chapter video (e.g. 0–5m = Introduction).

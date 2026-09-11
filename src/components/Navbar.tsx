@@ -227,12 +227,6 @@ export default function Navbar() {
                     </Button>
                   </Link>
 
-                  <Link href="/test">
-                    <Button size="sm" variant="outline">
-                      Test platform
-                    </Button>
-                  </Link>
-
                   <Link href="/register?mode=signup">
                     <Button size="sm">Get Started</Button>
                   </Link>
@@ -335,32 +329,61 @@ export default function Navbar() {
           </div>
         </div>
       </div>
-      {isManager && (
-        <div className="border-t border-sidebar-border bg-sidebar">
-          <nav className="mx-auto flex h-11 max-w-7xl items-center justify-center gap-1 overflow-x-auto px-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {WORKSPACE_LINKS.map((link) => {
-              const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={`flex shrink-0 items-center gap-1.5 rounded-md px-3 py-2 text-[13px] transition-colors ${active ? "bg-sidebar-accent text-sidebar-primary" : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"}`}
-                >
-                  <link.icon className="size-[14px]" />
-                  {link.label}
-                </Link>
-              );
-            })}
-            <Link
-              href="/profile"
-              className="flex shrink-0 items-center gap-1.5 rounded-md px-3 py-2 text-[13px] text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-            >
-              <UserRound className="size-[14px]" />
-              Profile
-            </Link>
-          </nav>
-        </div>
-      )}
+  {isManager && (
+  <div className="hidden border-t border-border bg-background md:block">
+    <nav className="mx-auto flex h-11 max-w-7xl items-center justify-start gap-7 overflow-x-auto px-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {WORKSPACE_LINKS.map((link) => {
+        const active =
+          pathname === link.href || pathname.startsWith(`${link.href}/`);
+
+        return (
+          <Link
+            key={link.href}
+            href={link.href}
+            className={[
+              "group relative flex h-full shrink-0 items-center gap-1.5 text-[13px] font-medium transition-colors",
+              active
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            ].join(" ")}
+          >
+            <link.icon className="size-[14px]" />
+            <span>{link.label}</span>
+
+            <span
+              className={[
+                "absolute bottom-0 left-0 h-0.5 rounded-full bg-primary transition-all duration-200",
+                active ? "w-full" : "w-0 group-hover:w-full",
+              ].join(" ")}
+            />
+          </Link>
+        );
+      })}
+
+      <Link
+        href="/profile"
+        className={[
+          "group relative flex h-full shrink-0 items-center gap-1.5 text-[13px] font-medium transition-colors",
+          pathname === "/profile" || pathname.startsWith("/profile/")
+            ? "text-foreground"
+            : "text-muted-foreground hover:text-foreground",
+        ].join(" ")}
+      >
+        <UserRound className="size-[14px]" />
+        <span>Profile</span>
+
+        <span
+          className={[
+            "absolute bottom-0 left-0 h-0.5 rounded-full bg-primary transition-all duration-200",
+            pathname === "/profile" || pathname.startsWith("/profile/")
+              ? "w-full"
+              : "w-0 group-hover:w-full",
+          ].join(" ")}
+        />
+      </Link>
+    </nav>
+  </div>
+)}
     </header>
   );
 }
