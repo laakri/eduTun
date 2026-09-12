@@ -1,0 +1,3 @@
+ALTER TABLE "User" ADD COLUMN "bio" TEXT;
+ALTER TABLE "User" ADD COLUMN "specialties" TEXT;
+ALTER TABLE "User" ADD COLUMN "websiteUrl" TEXT;

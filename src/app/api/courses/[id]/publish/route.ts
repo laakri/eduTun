@@ -33,7 +33,6 @@ export const POST = withErrorHandler(
           where: { id: chapter.id },
           data: {
             videoStatus,
-            ready: videoStatus === VideoStatus.READY,
             ...(bunny.durationSeconds
               ? { durationSeconds: bunny.durationSeconds }
               : {}),

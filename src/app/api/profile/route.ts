@@ -13,6 +13,9 @@ import { ValidationError } from "@/lib/errors";
 const profileSchema = z.object({
   fullName: z.string().min(2).max(120),
   phone: z.string().max(30).optional().nullable(),
+  bio: z.string().max(1200).optional().nullable(),
+  specialties: z.string().max(300).optional().nullable(),
+  websiteUrl: z.string().url().max(300).optional().nullable().or(z.literal("")),
 });
 
 function avatarUrlForClient(value: string | null) {
@@ -36,6 +39,9 @@ export const GET = withErrorHandler(async () => {
       fullName: true,
       phone: true,
       avatarUrl: true,
+      bio: true,
+      specialties: true,
+      websiteUrl: true,
       createdAt: true,
       roles: { include: { role: true } },
       coursesTaught: {
@@ -63,8 +69,8 @@ export const PATCH = withErrorHandler(async (req) => {
     const input = profileSchema.parse(await req.json());
     const updated = await db.user.update({
       where: { id: user.id },
-      data: { fullName: input.fullName, phone: input.phone || null },
-      select: { id: true, fullName: true, phone: true, avatarUrl: true },
+      data: { fullName: input.fullName, phone: input.phone || null, bio: input.bio || null, specialties: input.specialties || null, websiteUrl: input.websiteUrl || null },
+      select: { id: true, fullName: true, phone: true, avatarUrl: true, bio: true, specialties: true, websiteUrl: true },
     });
     return ok({ ...updated, avatarUrl: avatarUrlForClient(updated.avatarUrl) });
   }

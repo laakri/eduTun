@@ -59,7 +59,11 @@ const WORKSPACE_LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/courses", label: "Courses", icon: BookOpen },
   { href: "/students", label: "Students", icon: Users },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/settings/profile", label: "Settings", icon: Settings },
+];
+
+const ADMIN_LINKS = [
+  { href: "/admin", label: "Admin", icon: LayoutDashboard },
 ];
 
 function ThemeToggle() {
@@ -145,7 +149,7 @@ function AccountMenu() {
             Dashboard
           </DropdownMenuItem>
 
-          <DropdownMenuItem render={<Link href="/profile" className="flex items-center gap-2" />}>
+          <DropdownMenuItem render={<Link href="/professor/myid" className="flex items-center gap-2" />}>
             <UserRound className="h-4 w-4" />
             Profile
           </DropdownMenuItem>
@@ -218,7 +222,18 @@ export default function Navbar() {
           {!isLoading && (
             <div className="hidden md:flex items-center gap-2">
               {isLoggedIn ? (
-                <AccountMenu />
+                <>
+                  {!isManager && (
+                    <Link
+                      href="/learn"
+                      className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      <BookOpen className="size-4" />
+                      My courses
+                    </Link>
+                  )}
+                  <AccountMenu />
+                </>
               ) : (
                 <>
                   <Link href="/register?mode=login">
@@ -295,12 +310,20 @@ export default function Navbar() {
                             Dashboard
                           </Button>
                         </Link>
-                        <Link href="/profile">
+                        <Link href="/professor/myid">
                           <Button variant="outline" className="h-11 w-full justify-start gap-2.5 text-[15px]">
                             <UserRound className="h-4 w-4" />
                             Profile
                           </Button>
                         </Link>
+                        {session?.user?.roles?.includes("admin") && (
+                          <Link href="/admin">
+                            <Button variant="outline" className="h-11 w-full justify-start gap-2.5 text-[15px]">
+                              <LayoutDashboard className="h-4 w-4" />
+                              Admin workspace
+                            </Button>
+                          </Link>
+                        )}
                         <Button
                           variant="ghost"
                           className="h-11 w-full justify-start gap-2.5 text-[15px] text-destructive hover:text-destructive"
@@ -332,7 +355,7 @@ export default function Navbar() {
   {isManager && (
   <div className="hidden border-t border-border bg-background md:block">
     <nav className="mx-auto flex h-11 max-w-7xl items-center justify-start gap-7 overflow-x-auto px-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {WORKSPACE_LINKS.map((link) => {
+      {[...WORKSPACE_LINKS, ...(session?.user?.roles?.includes("admin") ? ADMIN_LINKS : [])].map((link) => {
         const active =
           pathname === link.href || pathname.startsWith(`${link.href}/`);
 
@@ -359,28 +382,6 @@ export default function Navbar() {
           </Link>
         );
       })}
-
-      <Link
-        href="/profile"
-        className={[
-          "group relative flex h-full shrink-0 items-center gap-1.5 text-[13px] font-medium transition-colors",
-          pathname === "/profile" || pathname.startsWith("/profile/")
-            ? "text-foreground"
-            : "text-muted-foreground hover:text-foreground",
-        ].join(" ")}
-      >
-        <UserRound className="size-[14px]" />
-        <span>Profile</span>
-
-        <span
-          className={[
-            "absolute bottom-0 left-0 h-0.5 rounded-full bg-primary transition-all duration-200",
-            pathname === "/profile" || pathname.startsWith("/profile/")
-              ? "w-full"
-              : "w-0 group-hover:w-full",
-          ].join(" ")}
-        />
-      </Link>
     </nav>
   </div>
 )}

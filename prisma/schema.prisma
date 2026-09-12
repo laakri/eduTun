@@ -10,7 +10,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
 // ------------------------------------------------------------
 // AUTH TABLES (NextAuth / Auth.js)
 // Not written to under the current JWT session strategy, but
@@ -68,25 +67,30 @@ model User {
   fullName     String
   phone        String?
   avatarUrl    String?
+  bio          String?  @db.Text
+  specialties  String?
+  websiteUrl   String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  accounts        Account[]
-  sessions        Session[]
-  roles           UserRole[]
-  coursesTaught   Course[]         @relation("ProfCourses")
-  profApplications ProfApplication[] @relation("ApplicantApplications")
-  reviewedProfApplications ProfApplication[] @relation("ApplicationReviewer")
-  packEnrollments PackEnrollment[]
-  subscriptions   UserSubscription[]
-  progress        VideoProgress[]
-  quizAttempts    QuizAttempt[]
-  pfeListings     PfeListing[]     @relation("CompanyListings")
-  pfeApplications PfeApplication[]
-  professorRatings ProfessorRating[] @relation("ProfessorRatingAuthor")
-  ratingsGiven ProfessorRating[] @relation("ProfessorRatingUser")
-  chapterVotes    ChapterVote[]
-  chapterComments ChapterComment[]
+  accounts                 Account[]
+  sessions                 Session[]
+  roles                    UserRole[]
+  coursesTaught            Course[]           @relation("ProfCourses")
+  profApplications         ProfApplication[]  @relation("ApplicantApplications")
+  reviewedProfApplications ProfApplication[]  @relation("ApplicationReviewer")
+  packEnrollments          PackEnrollment[]
+  subscriptions            UserSubscription[]
+  bacAccessRequests        BacAccessRequest[]       @relation("BacAccessApplicant")
+  reviewedBacAccessRequests BacAccessRequest[]      @relation("BacAccessReviewer")
+  progress                 VideoProgress[]
+  quizAttempts             QuizAttempt[]
+  pfeListings              PfeListing[]       @relation("CompanyListings")
+  pfeApplications          PfeApplication[]
+  professorRatings         ProfessorRating[]  @relation("ProfessorRatingAuthor")
+  ratingsGiven             ProfessorRating[]  @relation("ProfessorRatingUser")
+  chapterVotes             ChapterVote[]
+  chapterComments          ChapterComment[]
 }
 
 model Role {
@@ -99,30 +103,49 @@ model Role {
 model UserRole {
   userId String
   roleId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@id([userId, roleId])
 }
 
 // ------------------------------------------------------------
-// CATEGORY — generic, self-referencing. Your version, unchanged.
-// Bac, PFE, Coding, Languages — all rows, nested via parentId.
+// CATEGORY — generic, multi-parent compatible.
+// Bac, PFE, Coding, Languages — all rows can be reused under multiple
+// parent categories through CategoryRelation without duplicating records.
 // ------------------------------------------------------------
 
 model Category {
-  id       String     @id @default(cuid())
-  name     String
-  slug     String     @unique
-  parentId String?
-  parent   Category?  @relation("CategoryToCategory", fields: [parentId], references: [id])
-  children Category[] @relation("CategoryToCategory")
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  courses          CourseCategory[]
-  pfeListings      PfeListing[]
-  packItems        PackItem[]
+  parentLinks CategoryRelation[] @relation("CategoryParent")
+  childLinks  CategoryRelation[] @relation("CategoryChild")
+
+  courses           CourseCategory[]
+  pfeListings       PfeListing[]
+  packItems         PackItem[]
   subscriptionPlans SubscriptionPlan[]
-  profApplications ProfApplicationCategory[]
+  bacTypeSubscriptions UserSubscription[]
+  profApplications  ProfApplicationCategory[]
+  bacAccessRequests  BacAccessRequest[] @relation("BacTypeRequests")
+  subscriptionSelections UserSubscriptionCategory[]
+}
+
+model CategoryRelation {
+  parentId String
+  childId  String
+  order    Int    @default(0)
+
+  parent Category @relation("CategoryParent", fields: [parentId], references: [id], onDelete: Cascade)
+  child  Category @relation("CategoryChild", fields: [childId], references: [id], onDelete: Cascade)
+
+  @@id([parentId, childId])
+  @@index([childId])
+  @@index([parentId, order])
 }
 
 model Tag {
@@ -174,14 +197,17 @@ model Course {
 model CourseCategory {
   courseId   String
   categoryId String
-  course     Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  order      Int    @default(0)
+
+  course   Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@id([courseId, categoryId])
+  @@index([categoryId, order])
 }
 
 model Chapter {
-  id              String  @id @default(cuid())
+  id              String      @id @default(cuid())
   courseId        String
   title           String
   description     String?
@@ -189,31 +215,32 @@ model Chapter {
   videoProvider   String // "bunny" | "youtube"
   videoId         String
   durationSeconds Int?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  ready Boolean @default(false)
-  videoStatus VideoStatus @default(PROCESSING)
-  published Boolean @default(false)
-  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  videoStatus     VideoStatus @default(PROCESSING)
+  published       Boolean     @default(false)
+
   course    Course            @relation(fields: [courseId], references: [id], onDelete: Cascade)
   progress  VideoProgress[]
   quiz      Quiz?
   sections  VideoSection[]
   resources ChapterResource[]
-  votes ChapterVote[]
-  comments ChapterComment[]
+  votes     ChapterVote[]
+  comments  ChapterComment[]
+
+  @@unique([courseId, order])
 }
 
 model ProfessorRating {
-  id         String   @id @default(cuid())
+  id          String   @id @default(cuid())
   professorId String
-  userId     String
-  rating     Int
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  userId      String
+  rating      Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   professor User @relation("ProfessorRatingAuthor", fields: [professorId], references: [id], onDelete: Cascade)
-  user User @relation("ProfessorRatingUser", fields: [userId], references: [id], onDelete: Cascade)
+  user      User @relation("ProfessorRatingUser", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([professorId, userId])
   @@index([professorId])
@@ -228,7 +255,7 @@ model ChapterVote {
   updatedAt DateTime @updatedAt
 
   chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([chapterId, userId])
   @@index([chapterId])
@@ -243,10 +270,10 @@ model ChapterComment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chapter Chapter          @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   parent  ChapterComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
-  replies ChapterComment[]  @relation("CommentReplies")
+  replies ChapterComment[] @relation("CommentReplies")
 
   @@index([chapterId, createdAt])
   @@index([parentId])
@@ -272,7 +299,7 @@ model ChapterResource {
   id          String   @id @default(cuid())
   chapterId   String
   title       String
-  kind        String   // "pdf" | future kinds as plain strings
+  kind        String // "pdf" | future kinds as plain strings
   storageKey  String
   sizeBytes   Int?
   contentType String?
@@ -337,37 +364,78 @@ model QuizAttempt {
 }
 
 model SubscriptionPlan {
-  id               String   @id @default(cuid())
-  slug             String   @unique
-  name             String
-  description      String?
-  domainId         String
-  monthlyPriceCents Int     @default(0)
-  quarterlyPriceCents Int    @default(0)
-  yearlyPriceCents   Int     @default(0)
-  isActive         Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  slug                String   @unique
+  name                String
+  description         String?
+  domainId            String
+  monthlyPriceCents   Int      @default(0)
+  quarterlyPriceCents Int      @default(0)
+  yearlyPriceCents    Int      @default(0)
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
-  domain Category @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  domain        Category           @relation(fields: [domainId], references: [id], onDelete: Cascade)
   subscriptions UserSubscription[]
+  bacAccessRequests BacAccessRequest[]
 }
 
 model UserSubscription {
-  id          String   @id @default(cuid())
-  userId      String
-  planId      String
+  id           String   @id @default(cuid())
+  userId       String
+  planId       String
+  bacTypeId    String?
+  accessRequestId String? @unique
   billingCycle String   @default("month")
-  status      String   @default("active")
-  startedAt   DateTime @default(now())
-  expiresAt   DateTime
+  status       String   @default("active")
+  startedAt    DateTime @default(now())
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  bacType Category?      @relation(fields: [bacTypeId], references: [id], onDelete: SetNull)
+  accessRequest BacAccessRequest? @relation(fields: [accessRequestId], references: [id], onDelete: SetNull)
+  categorySelections UserSubscriptionCategory[]
+
+  @@index([userId, status])
+}
+
+model BacAccessRequest {
+  id           String   @id @default(cuid())
+  userId       String
+  planId       String
+  bacTypeId    String
+  status       String   @default("pending") // pending | approved | rejected
+  reviewNote   String?
+  reviewedById String?
+  requestedAt DateTime @default(now())
+  reviewedAt  DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  user       User              @relation("BacAccessApplicant", fields: [userId], references: [id], onDelete: Cascade)
+  plan       SubscriptionPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
+  bacType    Category          @relation("BacTypeRequests", fields: [bacTypeId], references: [id], onDelete: Cascade)
+  reviewedBy User?             @relation("BacAccessReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  subscription UserSubscription?
 
+  @@index([status, createdAt])
   @@index([userId, status])
+}
+
+model UserSubscriptionCategory {
+  subscriptionId String
+  categoryId     String
+  selectedAt     DateTime @default(now())
+
+  subscription UserSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  category     Category         @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([subscriptionId, categoryId])
+  @@index([categoryId])
 }
 
 // ------------------------------------------------------------
@@ -385,7 +453,7 @@ model Pack {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  items PackItem[]
+  items       PackItem[]
   enrollments PackEnrollment[]
 }
 
@@ -424,7 +492,7 @@ model PackEnrollment {
 // Applying does not grant the professor role. An admin must explicitly
 // approve the application, at which point the service adds the prof role.
 model ProfApplication {
-  id                    String   @id @default(cuid())
+  id                    String    @id @default(cuid())
   applicantId           String
   fullName              String
   dateOfBirth           DateTime
@@ -436,15 +504,15 @@ model ProfApplication {
   message               String
   identityDocumentKey   String
   qualificationProofKey String
-  status                String   @default("pending") // pending | approved | rejected
+  status                String    @default("pending") // pending | approved | rejected
   reviewNote            String?
   reviewedById          String?
   reviewedAt            DateTime?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  applicant User @relation("ApplicantApplications", fields: [applicantId], references: [id], onDelete: Cascade)
-  reviewedBy User? @relation("ApplicationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  applicant  User                      @relation("ApplicantApplications", fields: [applicantId], references: [id], onDelete: Cascade)
+  reviewedBy User?                     @relation("ApplicationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
   categories ProfApplicationCategory[]
 
   @@index([status, createdAt])

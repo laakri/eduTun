@@ -4,7 +4,7 @@ import { ok, withErrorHandler } from "@/lib/api-response";
 
 function collectDescendantCategoryIds(
   domainId: string,
-  categories: Array<{ id: string; parentId: string | null }>,
+  categoryLinks: Array<{ parentId: string; childId: string }>,
 ) {
   const ids = new Set<string>();
   const stack = [domainId];
@@ -14,9 +14,9 @@ function collectDescendantCategoryIds(
     if (!currentId || ids.has(currentId)) continue;
     ids.add(currentId);
 
-    for (const category of categories) {
-      if (category.parentId === currentId) {
-        stack.push(category.id);
+    for (const link of categoryLinks) {
+      if (link.parentId === currentId) {
+        stack.push(link.childId);
       }
     }
   }
@@ -26,7 +26,7 @@ function collectDescendantCategoryIds(
 
 export const GET = withErrorHandler(async () => {
   const user = await requireUser();
-  const [courses, activeSubscriptions, categories] = await Promise.all([
+  const [courses, activeSubscriptions, categories, categoryRows] = await Promise.all([
     db.course.findMany({
       where: { published: true },
       include: {
@@ -49,28 +49,64 @@ export const GET = withErrorHandler(async () => {
         status: "active",
         expiresAt: { gt: new Date() },
       },
-      select: { plan: { select: { domainId: true } } },
+      select: {
+        id: true,
+        bacTypeId: true,
+        plan: { select: { domainId: true, name: true } },
+        bacType: { select: { name: true } },
+        categorySelections: { select: { categoryId: true } },
+      },
     }),
-    db.category.findMany({ select: { id: true, parentId: true } }),
+    db.categoryRelation.findMany({ select: { parentId: true, childId: true } }),
+    db.category.findMany({ select: { id: true, name: true, slug: true } }),
   ]);
 
+  const categoryLinks = categories;
+  const parentMap = new Map<string, string[]>();
+  for (const link of categoryLinks) {
+    const parents = parentMap.get(link.childId) ?? [];
+    parents.push(link.parentId);
+    parentMap.set(link.childId, parents);
+  }
+
   const grantedCategoryIds = new Set<string>();
+  const subscriptionsNeedingCategories = activeSubscriptions.filter(
+    (subscription) => subscription.bacTypeId && subscription.categorySelections.length === 0,
+  );
   for (const subscription of activeSubscriptions) {
-    const domainCategoryIds = collectDescendantCategoryIds(
-      subscription.plan.domainId,
-      categories,
-    );
+    if (subscription.bacTypeId && subscription.categorySelections.length === 0) continue;
+    const roots = subscription.categorySelections.length > 0
+      ? subscription.categorySelections.map((selection) => selection.categoryId)
+      : [subscription.plan.domainId];
+    const domainCategoryIds = new Set<string>();
+    for (const root of roots) {
+      for (const categoryId of collectDescendantCategoryIds(root, categoryLinks)) {
+        domainCategoryIds.add(categoryId);
+      }
+    }
     for (const categoryId of domainCategoryIds) grantedCategoryIds.add(categoryId);
   }
 
+  const availableCategories = subscriptionsNeedingCategories.flatMap((subscription) => {
+    const ids = new Set(
+      categoryLinks
+        .filter((link) => link.parentId === subscription.bacTypeId)
+        .map((link) => link.childId),
+    );
+    return categoryRows.filter((category) => ids.has(category.id));
+  });
+
   const canAccessCategory = (categoryId: string) => {
-    let currentId: string | null = categoryId;
+    const stack: string[] = [categoryId];
     const visited = new Set<string>();
-    while (currentId && !visited.has(currentId)) {
-      if (grantedCategoryIds.has(currentId)) return true;
+    while (stack.length > 0) {
+      const currentId = stack.pop();
+      if (!currentId || visited.has(currentId)) continue;
       visited.add(currentId);
-      const parent = categories.find((category) => category.id === currentId);
-      currentId = parent?.parentId ?? null;
+      if (grantedCategoryIds.has(currentId)) return true;
+      for (const parentId of parentMap.get(currentId) ?? []) {
+        if (!visited.has(parentId)) stack.push(parentId);
+      }
     }
     return false;
   };
@@ -108,5 +144,15 @@ export const GET = withErrorHandler(async () => {
     courses: accessibleCourses,
     hasActivePack: hasActiveSubscription,
     hasActiveSubscription,
+    needsCategorySelection: subscriptionsNeedingCategories.length > 0,
+    categorySelectionSubscriptionId: subscriptionsNeedingCategories[0]?.id ?? null,
+    availableCategories: [...new Map(availableCategories.map((category) => [category.id, category])).values()],
+    subscriptions: activeSubscriptions.map((subscription) => ({
+      id: subscription.id,
+      bacTypeId: subscription.bacTypeId,
+      bacTypeName: subscription.bacType?.name ?? null,
+      planName: subscription.plan.name,
+      selectedCategoryIds: subscription.categorySelections.map((selection) => selection.categoryId),
+    })),
   });
 });

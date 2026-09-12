@@ -28,7 +28,6 @@ export const GET = withErrorHandler(
       where: { id },
       data: {
         videoStatus,
-        ready: videoStatus === VideoStatus.READY,
         ...(status.durationSeconds
           ? { durationSeconds: status.durationSeconds }
           : {}),

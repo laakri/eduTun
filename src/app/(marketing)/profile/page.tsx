@@ -1,31 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import Link from "next/link";
 import {
   Camera,
   Loader2,
   Mail,
   Phone,
-  CalendarDays,
-  BookOpen,
-  CheckCircle2,
-  Circle,
-  ExternalLink,
-  Pencil,
-  X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
-type Course = {
-  id: string;
-  title: string;
-  published: boolean;
-  _count: { chapters: number };
-};
 
 type Profile = {
   id: string;
@@ -35,13 +20,6 @@ type Profile = {
   avatarUrl: string | null;
   createdAt: string;
   roles: string[];
-  coursesTaught: Course[];
-};
-
-const ROLE_LABELS: Record<string, string> = {
-  student: "Student",
-  professor: "Professor",
-  admin: "Admin",
 };
 
 function initials(name: string) {
@@ -65,7 +43,6 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
-  const [editing, setEditing] = useState(false);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [saving, setSaving] = useState(false);
@@ -126,7 +103,6 @@ export default function ProfilePage() {
       const json = await res.json();
       const updated = json.data ?? json;
       setProfile((prev) => (prev ? { ...prev, ...updated } : prev));
-      setEditing(false);
     } catch {
       setSaveError("Couldn't save your changes. Please try again.");
     } finally {
@@ -139,7 +115,6 @@ export default function ProfilePage() {
     setFullName(profile.fullName);
     setPhone(profile.phone ?? "");
     setSaveError("");
-    setEditing(false);
   }
 
   async function handleAvatarChange(
@@ -200,13 +175,19 @@ export default function ProfilePage() {
     );
   }
 
-  const isProfessor =
-    profile.roles.includes("professor") || profile.coursesTaught.length > 0;
-
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10 sm:py-14">
-      {/* HEADER */}
-      <div className="flex flex-col items-start gap-6 sm:flex-row sm:items-center">
+    <main className="mx-auto w-full max-w-2xl px-4 py-10 sm:py-14">
+      <form onSubmit={handleSaveDetails} className="space-y-8">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            Edit profile
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Update your personal information and profile photo.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-5 rounded-lg border border-border bg-card p-5 sm:flex-row sm:items-center">
         <div className="relative shrink-0">
           <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-muted text-lg font-medium text-foreground sm:h-24 sm:w-24">
             {profile.avatarUrl ? (
@@ -244,77 +225,24 @@ export default function ProfilePage() {
           />
         </div>
 
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-xl font-semibold text-foreground sm:text-2xl">
-            {profile.fullName}
-          </h1>
-
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <Mail className="h-3.5 w-3.5" />
-              {profile.email}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <CalendarDays className="h-3.5 w-3.5" />
-              Member since {formatMemberSince(profile.createdAt)}
-            </span>
+          <div>
+            <p className="text-sm font-medium text-foreground">Profile photo</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              JPEG, PNG, or WebP up to 4 MB.
+            </p>
           </div>
-
-          {profile.roles.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {profile.roles.map((role) => (
-                <span
-                  key={role}
-                  className="rounded-full bg-muted/40 px-2.5 py-0.5 text-xs text-foreground"
-                >
-                  {ROLE_LABELS[role] ?? role}
-                </span>
-              ))}
-            </div>
-          )}
         </div>
-
-        {isProfessor && (
-          <Button
-            asChild
-            variant="outline"
-            size="sm"
-            className="shrink-0 gap-1.5"
-          >
-            <Link href={`/professors/${profile.id}`}>
-              <ExternalLink className="h-3.5 w-3.5" />
-              View public profile
-            </Link>
-          </Button>
-        )}
-      </div>
 
       {uploadError && (
         <p className="mt-3 text-sm text-destructive">{uploadError}</p>
       )}
 
-      {/* ACCOUNT DETAILS */}
-      <section className="mt-10 rounded-lg bg-muted/30">
-        <div className="flex items-center justify-between px-5 py-4">
+        <section className="space-y-5 rounded-lg border border-border bg-card p-5">
           <h2 className="text-sm font-medium text-foreground">
-            Account details
+            Personal information
           </h2>
-          {!editing && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => setEditing(true)}
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              Edit
-            </Button>
-          )}
-        </div>
 
-        <div className="px-5 py-5">
-          {editing ? (
-            <form onSubmit={handleSaveDetails} className="space-y-4">
+          <div className="space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="fullName">Full name</Label>
                 <Input
@@ -337,128 +265,31 @@ export default function ProfilePage() {
                   placeholder="Optional"
                 />
               </div>
-
-              {saveError && (
-                <p className="text-sm text-destructive">{saveError}</p>
-              )}
-
-              <div className="flex items-center gap-2 pt-1">
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={saving}
-                  className="gap-1.5"
-                >
-                  {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  Save changes
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={cancelEditing}
-                  disabled={saving}
-                  className="gap-1.5"
-                >
-                  <X className="h-3.5 w-3.5" />
-                  Cancel
-                </Button>
+              <div className="space-y-1.5">
+                <Label htmlFor="email">Email</Label>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input id="email" value={profile.email} readOnly className="pl-8" />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Email is tied to your login and cannot be changed here.
+                </p>
               </div>
-            </form>
-          ) : (
-            <dl className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <dt className="text-xs text-muted-foreground">Full name</dt>
-                <dd className="mt-1 text-sm text-foreground">
-                  {profile.fullName}
-                </dd>
-              </div>
-              <div>
-                <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Phone className="h-3 w-3" /> Phone
-                </dt>
-                <dd className="mt-1 text-sm text-foreground">
-                  {profile.phone || (
-                    <span className="text-muted-foreground">Not set</span>
-                  )}
-                </dd>
-              </div>
-            </dl>
-          )}
-        </div>
-      </section>
-
-      {/* COURSES TAUGHT */}
-      {isProfessor && (
-        <section className="mt-8 rounded-lg bg-muted/30">
-          <div className="flex items-center justify-between px-5 py-4">
-            <h2 className="text-sm font-medium text-foreground">
-              Courses you teach
-            </h2>
-            <div className="flex items-center gap-3">
-              <Link
-                href={`/professors/${profile.id}`}
-                className="text-xs text-primary hover:underline"
-              >
-                Public view
-              </Link>
-              <span className="text-xs text-muted-foreground">
-                {profile.coursesTaught.length}{" "}
-                {profile.coursesTaught.length === 1 ? "course" : "courses"}
-              </span>
-            </div>
           </div>
-
-          {profile.coursesTaught.length === 0 ? (
-            <div className="px-5 py-10 text-center">
-              <p className="text-sm text-muted-foreground">
-                You haven&apos;t created a course yet.
-              </p>
-              <Link href="/courses/new" className="mt-3 inline-block">
-                <Button size="sm">Create your first course</Button>
-              </Link>
-            </div>
-          ) : (
-            <ul className="divide-y divide-muted">
-              {profile.coursesTaught.map((course) => (
-                <li key={course.id}>
-                  <Link
-                    href={`/courses/${course.id}/edit`}
-                    className="flex items-center justify-between gap-4 px-5 py-3.5 transition hover:bg-muted/30"
-                  >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      <span className="truncate text-sm text-foreground">
-                        {course.title}
-                      </span>
-                    </div>
-
-                    <div className="flex shrink-0 items-center gap-4">
-                      <span className="text-xs text-muted-foreground">
-                        {course._count.chapters}{" "}
-                        {course._count.chapters === 1 ? "chapter" : "chapters"}
-                      </span>
-                      <span className="flex items-center gap-1 text-xs">
-                        {course.published ? (
-                          <>
-                            <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
-                            <span className="text-foreground">Published</span>
-                          </>
-                        ) : (
-                          <>
-                            <Circle className="h-3.5 w-3.5 text-muted-foreground" />
-                            <span className="text-muted-foreground">Draft</span>
-                          </>
-                        )}
-                      </span>
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
         </section>
-      )}
-    </div>
+
+        {saveError && <p className="text-sm text-destructive">{saveError}</p>}
+
+        <div className="flex items-center justify-end gap-2">
+          <Button type="button" variant="outline" onClick={cancelEditing} disabled={saving}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={saving} className="gap-1.5">
+            {saving && <Loader2 className="size-3.5 animate-spin" />}
+            Save changes
+          </Button>
+        </div>
+      </form>
+    </main>
   );
 }

@@ -109,7 +109,6 @@ export const PATCH = withErrorHandler(
               where: { id: chapter.id },
               data: {
                 videoStatus,
-                ready: videoStatus === VideoStatus.READY,
                 ...(status.durationSeconds
                   ? { durationSeconds: status.durationSeconds }
                   : {}),

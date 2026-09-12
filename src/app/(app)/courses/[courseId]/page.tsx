@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import {
-  ArrowLeft,
   BookOpen,
   CheckCircle2,
   Clock3,
@@ -233,21 +232,17 @@ export default function CourseStudioPage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="space-y-10">
-        {/* Back */}
-        <Link
-          href="/courses"
-          className="group inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="size-4 transition-transform duration-200 group-hover:-translate-x-0.5" />
-          Courses
-        </Link>
-
+    <main className="-mx-6 -mt-6 w-[calc(100%+3rem)] ">
+      <div className="space-y-8">
         {/* Course header */}
-        <section className="border-b border-border pb-8">
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-center gap-4">
+        <section className="relative overflow-hidden border-b border-border bg-muted/40">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 opacity-30 [background-image:linear-gradient(rgba(15,23,42,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.05)_1px,transparent_1px)] [background-size:28px_28px]"
+          />
+          <div className="relative mx-auto max-w-6xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+            <div className="mt-4 flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+              <div className="relative flex min-w-0 items-center gap-4">
               {/* Small course cover */}
               <div className="size-24 shrink-0 overflow-hidden rounded-md border border-border bg-muted sm:size-28">
                 {course.coverImageUrl ? (
@@ -282,10 +277,10 @@ export default function CourseStudioPage() {
                   {course.description || "No course description yet."}
                 </p>
               </div>
-            </div>
+              </div>
 
             {/* Actions */}
-            <div className="flex shrink-0 items-center gap-2 sm:self-center">
+              <div className="relative flex shrink-0 items-center gap-2 sm:self-center">
               <Button
                 size="sm"
                 variant={course.published ? "outline" : "default"}
@@ -305,17 +300,16 @@ export default function CourseStudioPage() {
                   Add chapter
                 </Link>
               </Button>
+              </div>
             </div>
-          </div>
 
-          {error && (
-            <p className="mt-4 text-sm text-destructive">{error}</p>
-          )}
+            {error && <p className="relative mt-4 text-sm text-destructive">{error}</p>}
+          </div>
         </section>
 
         {/* Curriculum */}
-        <section>
-          <div className="flex items-end justify-between">
+        <section className="mx-auto w-full max-w-6xl px-4 pb-10 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold tracking-tight">
                 Curriculum
@@ -412,27 +406,20 @@ export default function CourseStudioPage() {
 
                         {/* Chapter action */}
                         <div className="shrink-0 sm:pl-4">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant={
-                              chapter.published ? "outline" : "default"
-                            }
-                            disabled={chapterPublishing === chapter.id}
-                            onClick={() =>
-                              updateChapterPublication(
-                                chapter.id,
-                                !chapter.published,
-                              )
-                            }
-                            className="w-full sm:w-auto"
-                          >
-                            {chapterPublishing === chapter.id
-                              ? "Saving..."
-                              : chapter.published
-                                ? "Make draft"
-                                : "Publish"}
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button asChild type="button" size="sm" variant="outline">
+                              <Link href={`/courses/${course.id}/chapters/${chapter.id}/edit`}>Edit</Link>
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={chapter.published ? "outline" : "default"}
+                              disabled={chapterPublishing === chapter.id}
+                              onClick={() => updateChapterPublication(chapter.id, !chapter.published)}
+                            >
+                              {chapterPublishing === chapter.id ? "Saving..." : chapter.published ? "Make draft" : "Publish"}
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </div>

@@ -6,7 +6,14 @@ import { ok, withErrorHandler } from "@/lib/api-response";
 import { deleteBunnyVideo, deleteFromBunnyStorage, getBunnyVideoStatus } from "@/lib/bunny";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 
-const updateChapterSchema = z.object({ published: z.boolean() });
+const updateChapterSchema = z.object({
+  title: z.string().min(1).max(160).optional(),
+  description: z.string().max(2000).nullable().optional(),
+  published: z.boolean().optional(),
+}).refine(
+  (body) => body.title !== undefined || body.description !== undefined || body.published !== undefined,
+  { message: "At least one chapter field is required." },
+);
 
 export const PATCH = withErrorHandler(
   async (req, { params }: { params: Promise<{ id: string }> }) => {
@@ -20,7 +27,7 @@ export const PATCH = withErrorHandler(
     await assertCanEditCourse(chapter.course);
 
     const body = updateChapterSchema.parse(await req.json());
-    if (body.published) {
+    if (body.published === true) {
       let status;
       try {
         status = await getBunnyVideoStatus(chapter.videoId);
@@ -36,7 +43,7 @@ export const PATCH = withErrorHandler(
 
       await db.chapter.update({
         where: { id },
-        data: { videoStatus, ready: videoStatus === VideoStatus.READY },
+        data: { videoStatus },
       });
 
       if (videoStatus !== VideoStatus.READY) {
@@ -51,8 +58,12 @@ export const PATCH = withErrorHandler(
     return ok(
       await db.chapter.update({
         where: { id },
-        data: { published: body.published },
-        select: { id: true, published: true },
+        data: {
+          ...(body.title !== undefined ? { title: body.title } : {}),
+          ...(body.description !== undefined ? { description: body.description } : {}),
+          ...(body.published !== undefined ? { published: body.published } : {}),
+        },
+        select: { id: true, title: true, description: true, published: true },
       }),
     );
   },

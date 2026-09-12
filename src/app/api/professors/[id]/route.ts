@@ -25,6 +25,9 @@ export const GET = withErrorHandler(
         id: true,
         fullName: true,
         avatarUrl: true,
+        bio: true,
+        specialties: true,
+        websiteUrl: true,
         createdAt: true,
         coursesTaught: {
           where: { published: true },
@@ -34,18 +37,7 @@ export const GET = withErrorHandler(
             title: true,
             description: true,
             categories: { include: { category: { select: { name: true } } } },
-            chapters: {
-              orderBy: { order: "asc" },
-              select: {
-                id: true,
-                title: true,
-                order: true,
-                durationSeconds: true,
-                videoStatus: true,
-                _count: { select: { comments: true, votes: true } },
-                votes: { select: { value: true } },
-              },
-            },
+            _count: { select: { chapters: true } },
           },
         },
         professorRatings: { select: { rating: true } },
@@ -55,7 +47,7 @@ export const GET = withErrorHandler(
     if (!professor) throw new NotFoundError("Professor");
 
     const chapterCount = professor.coursesTaught.reduce(
-      (total, course) => total + course.chapters.length,
+      (total, course) => total + course._count.chapters,
       0,
     );
     const ratingTotal = professor.professorRatings.reduce(
@@ -82,6 +74,9 @@ export const GET = withErrorHandler(
       id: professor.id,
       fullName: professor.fullName,
       avatarUrl: avatarUrlForClient(professor.avatarUrl),
+      bio: professor.bio,
+      specialties: professor.specialties,
+      websiteUrl: professor.websiteUrl,
       memberSince: professor.createdAt,
       isAuthenticated: Boolean(session?.user),
       isOwner: session?.user?.id === professor.id,
@@ -97,15 +92,7 @@ export const GET = withErrorHandler(
         title: course.title,
         description: course.description,
         categories: course.categories.map(({ category }) => category.name),
-        chapters: course.chapters.map((chapter) => ({
-          id: chapter.id,
-          title: chapter.title,
-          order: chapter.order,
-          durationSeconds: chapter.durationSeconds,
-          videoStatus: chapter.videoStatus,
-          score: chapter.votes.reduce((total, vote) => total + vote.value, 0),
-          commentCount: chapter._count.comments,
-        })),
+        chapterCount: course._count.chapters,
       })),
     });
   },

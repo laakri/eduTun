@@ -60,6 +60,7 @@ export default function NewCoursePage() {
   const [description, setDescription] = useState("");
   const [parentCategoryId, setParentCategoryId] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [tagsInput, setTagsInput] = useState("");
 
   const [categories, setCategories] = useState<CategoryOption[]>([]);
@@ -155,6 +156,18 @@ export default function NewCoursePage() {
     setCategoryId("");
   }
 
+  function handleSubjectChange(value: string) {
+    setCategoryId(value);
+    if (value && !selectedCategoryIds.includes(value)) {
+      setSelectedCategoryIds((current) => [...current, value]);
+    }
+  }
+
+  function removeSelectedCategory(categoryToRemove: string) {
+    setSelectedCategoryIds((current) => current.filter((id) => id !== categoryToRemove));
+    if (categoryId === categoryToRemove) setCategoryId("");
+  }
+
   function readCoverFile(file: File | undefined) {
     if (!file || !file.type.startsWith("image/")) return;
     if (file.size > 5 * 1024 * 1024) {
@@ -184,8 +197,8 @@ export default function NewCoursePage() {
       return;
     }
 
-    if (!parentCategoryId || !categoryId) {
-      setError("Choose a program and a specific subject before continuing.");
+    if (!parentCategoryId || selectedCategoryIds.length === 0) {
+      setError("Choose a program and at least one specific subject before continuing.");
       return;
     }
 
@@ -204,7 +217,8 @@ export default function NewCoursePage() {
         body: JSON.stringify({
           title: title.trim(),
           description: description.trim() || null,
-          categoryId,
+          categoryId: selectedCategoryIds[0],
+          categoryIds: selectedCategoryIds,
           tags,
         }),
       });
@@ -467,7 +481,7 @@ export default function NewCoursePage() {
               <select
                 id="subject"
                 value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
+                onChange={(e) => handleSubjectChange(e.target.value)}
                 disabled={!parentCategoryId || subjectCategories.length === 0}
                 className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-[14px] text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -485,8 +499,27 @@ export default function NewCoursePage() {
                 ))}
               </select>
               <p className="mt-1 text-[11px] text-muted-foreground/70">
-                Choose the specific subject this course teaches.
+                Add every specific subject this course teaches. You can reuse a subject under multiple programs.
               </p>
+              {selectedCategoryIds.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {selectedCategoryIds.map((selectedId) => {
+                    const selected = categories
+                      .flatMap((category) => category.children ?? [category])
+                      .find((category) => category.id === selectedId);
+                    return (
+                      <button
+                        key={selectedId}
+                        type="button"
+                        onClick={() => removeSelectedCategory(selectedId)}
+                        className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs text-primary hover:bg-primary/20"
+                      >
+                        {selected?.name ?? selectedId} ×
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div>

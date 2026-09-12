@@ -15,8 +15,8 @@ export const GET = withErrorHandler(
                 id: true,
                 name: true,
                 slug: true,
-                parentId: true,
-                children: { select: { id: true, name: true, slug: true } },
+                parentLinks: { select: { parentId: true } },
+                childLinks: { select: { childId: true, child: { select: { id: true, name: true, slug: true } } } },
               },
             },
             course: {
@@ -32,6 +32,19 @@ export const GET = withErrorHandler(
       },
     });
     if (!pack) throw new NotFoundError("Pack");
-    return ok(pack);
+
+    return ok({
+      ...pack,
+      items: pack.items.map((item) => ({
+        ...item,
+        category: item.category
+          ? {
+              ...item.category,
+              parentId: item.category.parentLinks[0]?.parentId ?? null,
+              children: item.category.childLinks.map((link) => link.child),
+            }
+          : null,
+      })),
+    });
   },
 );

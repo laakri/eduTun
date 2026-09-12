@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 
 function collectDescendantCategoryIds(
   domainId: string,
-  categories: Array<{ id: string; parentId: string | null }>,
+  categoryLinks: Array<{ parentId: string; childId: string }>,
 ) {
   const ids = new Set<string>();
   const stack = [domainId];
@@ -12,9 +12,9 @@ function collectDescendantCategoryIds(
     if (!currentId || ids.has(currentId)) continue;
     ids.add(currentId);
 
-    for (const category of categories) {
-      if (category.parentId === currentId) {
-        stack.push(category.id);
+    for (const link of categoryLinks) {
+      if (link.parentId === currentId) {
+        stack.push(link.childId);
       }
     }
   }
@@ -43,28 +43,38 @@ export async function hasCourseAccess(userId: string, courseId: string) {
 
   if (activeSubscriptions.length === 0) return false;
 
-  const categories = await db.category.findMany({
-    select: { id: true, parentId: true },
+  const categoryLinks = await db.categoryRelation.findMany({
+    select: { parentId: true, childId: true },
   });
 
   const grantedCategoryIds = new Set<string>();
   for (const subscription of activeSubscriptions) {
     const domainIds = collectDescendantCategoryIds(
       subscription.plan.domainId,
-      categories,
+      categoryLinks,
     );
     for (const domainId of domainIds) grantedCategoryIds.add(domainId);
   }
 
+  const parentMap = new Map<string, string[]>();
+  for (const link of categoryLinks) {
+    const parents = parentMap.get(link.childId) ?? [];
+    parents.push(link.parentId);
+    parentMap.set(link.childId, parents);
+  }
+
   return course.categories.some(({ categoryId }) => {
-    let currentId: string | null = categoryId;
+    const stack: string[] = [categoryId];
     const visited = new Set<string>();
 
-    while (currentId && !visited.has(currentId)) {
-      if (grantedCategoryIds.has(currentId)) return true;
+    while (stack.length > 0) {
+      const currentId = stack.pop();
+      if (!currentId || visited.has(currentId)) continue;
       visited.add(currentId);
-      const parent = categories.find((category) => category.id === currentId);
-      currentId = parent?.parentId ?? null;
+      if (grantedCategoryIds.has(currentId)) return true;
+      for (const parentId of parentMap.get(currentId) ?? []) {
+        if (!visited.has(parentId)) stack.push(parentId);
+      }
     }
 
     return false;

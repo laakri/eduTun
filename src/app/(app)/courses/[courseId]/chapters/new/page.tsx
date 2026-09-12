@@ -30,13 +30,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { useToast } from "@/components/toast-provider";
 import {
-  VideoPlayer,
   formatTime,
   parseTimecode,
   type VideoChapter,
   type VideoPlayerHandle,
 } from "@/components/video-player";
+import VideoPlayer from "@/components/video-player";
 
 type UploadCredentials = {
   endpoint: string;
@@ -86,6 +87,12 @@ type ResourceDraft = {
   file: File;
 };
 
+type QuizQuestionDraft = {
+  id: string;
+  prompt: string;
+  answers: Array<{ id: string; text: string; isCorrect: boolean }>;
+};
+
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -119,6 +126,7 @@ function localId() {
 }
 
 export default function NewChapterPage() {
+  const toast = useToast();
   const router = useRouter();
   const params = useParams<{ courseId: string }>();
   const courseId = params.courseId;
@@ -143,6 +151,8 @@ export default function NewChapterPage() {
   const [sections, setSections] = useState<SectionDraft[]>([]);
   const [resources, setResources] = useState<ResourceDraft[]>([]);
   const [resourceError, setResourceError] = useState<string | null>(null);
+  const [quizTitle, setQuizTitle] = useState("Lesson quiz");
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestionDraft[]>([]);
 
   const [duration, setDuration] = useState(0);
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
@@ -462,6 +472,22 @@ export default function NewChapterPage() {
         if (!resourceResponse.ok)
           throw new Error("Video uploaded, but a PDF could not be uploaded.");
       }
+
+    if (quizQuestions.length > 0) {
+      const quizResponse = await fetch(`/api/chapters/${createdChapterId}/quiz`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: quizTitle.trim() || "Lesson quiz",
+          questions: quizQuestions.map((question) => ({
+            prompt: question.prompt.trim(),
+            answers: question.answers.map(({ text, isCorrect }) => ({ text: text.trim(), isCorrect })),
+          })),
+        }),
+      });
+      if (!quizResponse.ok) throw new Error("Video uploaded, but the quiz could not be saved.");
+    }
+    toast("Chapter content saved");
     } catch (err) {
       setPhase("error");
       setError(
@@ -555,6 +581,20 @@ export default function NewChapterPage() {
     setResources((prev) => prev.filter((r) => r.id !== id));
   }
 
+  function addQuizQuestion() {
+    setQuizQuestions((current) => [
+      ...current,
+      {
+        id: localId(),
+        prompt: "",
+        answers: [
+          { id: localId(), text: "", isCorrect: true },
+          { id: localId(), text: "", isCorrect: false },
+        ],
+      },
+    ]);
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
       <div className="mb-2 flex items-center justify-between">
@@ -623,7 +663,7 @@ export default function NewChapterPage() {
                 title={title.trim() || "Untitled chapter"}
                 chapters={chaptersForPlayer}
                 onDurationChange={setDuration}
-                onChapterChange={(c) => setActiveSectionId(c?.id ?? null)}
+                onChapterChange={(c: VideoChapter | null) => setActiveSectionId(c?.id ?? null)}
               />
 
               {phase === "idle" && (
@@ -974,6 +1014,26 @@ export default function NewChapterPage() {
           </CardContent>
         )}
       </Card>
+
+    <Card className="mt-6">
+    <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
+      <div>
+      <CardTitle className="text-base">Quiz <span className="font-normal text-muted-foreground">(optional)</span></CardTitle>
+      <CardDescription>Add a short knowledge check for this chapter.</CardDescription>
+      </div>
+      <Button type="button" variant="outline" size="sm" onClick={addQuizQuestion} disabled={locked}><Plus className="mr-1.5 h-4 w-4" />Add question</Button>
+    </CardHeader>
+    <CardContent className="space-y-4">
+      <Input value={quizTitle} onChange={(event) => setQuizTitle(event.target.value)} placeholder="Quiz title" disabled={locked} />
+      {quizQuestions.map((question, questionIndex) => (
+      <div key={question.id} className="space-y-3 rounded-lg border p-4">
+        <div className="flex gap-2"><Input value={question.prompt} onChange={(event) => setQuizQuestions((current) => current.map((item) => item.id === question.id ? { ...item, prompt: event.target.value } : item))} placeholder={`Question ${questionIndex + 1}`} disabled={locked} /><Button type="button" variant="ghost" size="icon" onClick={() => setQuizQuestions((current) => current.filter((item) => item.id !== question.id))} aria-label="Remove question"><Trash2 className="size-4 text-destructive" /></Button></div>
+        {question.answers.map((answer, answerIndex) => <div key={answer.id} className="flex items-center gap-2"><input type="radio" name={`new-quiz-${question.id}`} checked={answer.isCorrect} disabled={locked} onChange={() => setQuizQuestions((current) => current.map((item) => item.id === question.id ? { ...item, answers: item.answers.map((choice) => ({ ...choice, isCorrect: choice.id === answer.id })) } : item))} /><Input value={answer.text} onChange={(event) => setQuizQuestions((current) => current.map((item) => item.id === question.id ? { ...item, answers: item.answers.map((choice) => choice.id === answer.id ? { ...choice, text: event.target.value } : choice) } : item))} placeholder={`Answer ${answerIndex + 1}`} disabled={locked} /></div>)}
+      </div>
+      ))}
+      {quizQuestions.length === 0 && <p className="text-sm text-muted-foreground">No questions yet. Add one when you are ready.</p>}
+    </CardContent>
+    </Card>
 
       {/* Attach files — optional, e.g. slides or a worksheet */}
       <Card className="mt-6">

@@ -32,7 +32,6 @@ export const POST = withErrorHandler(async (req) => {
       videoProvider: "bunny",
       videoId,
       videoStatus: VideoStatus.PROCESSING,
-      ready: false,
     },
   });
 

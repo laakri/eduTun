@@ -90,10 +90,16 @@ async function main() {
     { slug: "bac-info", name: "Informatique" },
     { slug: "bac-physique", name: "Physique" },
   ]) {
-    await db.category.upsert({
+    const existingCategory = await db.category.upsert({
       where: { slug: category.slug },
-      update: { name: category.name, parentId: bac.id },
-      create: { ...category, parentId: bac.id },
+      update: { name: category.name },
+      create: { ...category },
+    });
+
+    await db.categoryRelation.upsert({
+      where: { parentId_childId: { parentId: bac.id, childId: existingCategory.id } },
+      update: { order: 0 },
+      create: { parentId: bac.id, childId: existingCategory.id, order: 0 },
     });
   }
 
@@ -172,7 +178,6 @@ async function main() {
             videoProvider: "bunny",
             videoId: "00000000-0000-0000-0000-000000000001",
             videoStatus: "PROCESSING",
-            ready: false,
           },
         },
       },

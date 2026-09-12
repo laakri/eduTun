@@ -215,9 +215,9 @@ export default function HomePage() {
       {/* Tunisian Baccalaureate sections                                  */}
       {/* ----------------------------------------------------------------- */}
 
-      <section className="border-b border-border">
+      <section className="border-b border-border ">
         <div className="mx-auto max-w-5xl px-6 py-14 sm:py-16">
-          <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="flex flex-wrap items-end justify-between gap-4 ">
             <div>
               <h2 className="text-xl font-semibold tracking-tight sm:text-2xl">
                 Préparez votre Bac

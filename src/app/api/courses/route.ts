@@ -10,21 +10,28 @@ import { ValidationError } from "@/lib/errors";
 const createCourseSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
-  categoryId: z.string().cuid(),
+  categoryId: z.string().cuid().optional(),
+  categoryIds: z.array(z.string().cuid()).min(1).optional(),
+}).refine((body) => body.categoryIds?.length || body.categoryId, {
+  message: "Choose at least one specific subject.",
+  path: ["categoryIds"],
 });
 
 export const POST = withErrorHandler(async (req) => {
   const user = await requireCourseManager();
   const body = await parseBody(req, createCourseSchema);
-  const category = await db.category.findUnique({
-    where: { id: body.categoryId },
-    select: { id: true, parentId: true, children: { select: { id: true } } },
+  const categoryIds = [...new Set(body.categoryIds ?? (body.categoryId ? [body.categoryId] : []))];
+  const categories = await db.category.findMany({
+    where: { id: { in: categoryIds } },
+    select: { id: true, childLinks: { select: { childId: true } } },
   });
 
-  if (!category) throw new ValidationError("Choose a valid subject.");
-  if (category.children.length > 0) {
+  if (categories.length !== categoryIds.length) {
+    throw new ValidationError("Choose valid subjects.");
+  }
+  if (categories.some((category) => category.childLinks.length > 0)) {
     throw new ValidationError(
-      "Choose a specific subject, not a parent program.",
+      "Choose specific subjects, not parent programs.",
     );
   }
 
@@ -33,7 +40,7 @@ export const POST = withErrorHandler(async (req) => {
       title: body.title,
       description: body.description ?? null,
       profId: user.id,
-      categories: { create: [{ categoryId: body.categoryId }] },
+      categories: { create: categoryIds.map((categoryId) => ({ categoryId })) },
     },
     include: {
       categories: { include: { category: true } },

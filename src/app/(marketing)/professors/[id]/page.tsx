@@ -2,40 +2,34 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  ArrowDown,
-  ArrowUp,
-  BookOpen,
-  CalendarDays,
-  Check,
-  Loader2,
-  MessageCircle,
-  Star,
-} from "lucide-react";
+import { BookOpen, CalendarDays, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 
-type Chapter = {
-  id: string;
-  title: string;
-  order: number;
-  durationSeconds: number | null;
-  videoStatus: string;
-  score: number;
-  commentCount: number;
-};
 type Course = {
   id: string;
   title: string;
   description: string | null;
   categories: string[];
-  chapters: Chapter[];
+  chapterCount: number;
 };
 type Professor = {
   id: string;
   fullName: string;
   avatarUrl: string | null;
+  bio: string | null;
+  specialties: string | null;
+  websiteUrl: string | null;
   memberSince: string;
   isAuthenticated: boolean;
   isOwner: boolean;
@@ -47,16 +41,6 @@ type Professor = {
     averageRating: number | null;
   };
   courses: Course[];
-};
-type Feedback = {
-  score: number;
-  viewerVote: number;
-  comments: Array<{
-    id: string;
-    body: string;
-    createdAt: string;
-    user: { fullName: string };
-  }>;
 };
 
 function initials(name: string) {
@@ -73,128 +57,28 @@ function formatDate(value: string) {
     year: "numeric",
   });
 }
-function formatDuration(seconds: number | null) {
-  if (!seconds) return "Duration pending";
-  return `${Math.round(seconds / 60)} min`;
-}
 
-function ChapterFeedback({
-  chapter,
-  isAuthenticated,
-}: {
-  chapter: Chapter;
-  isAuthenticated: boolean;
-}) {
-  const [feedback, setFeedback] = useState<Feedback | null>(null);
-  const [comment, setComment] = useState("");
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-
-  async function load() {
-    const response = await fetch(`/api/chapters/${chapter.id}/feedback`);
-    const json = await response.json();
-    if (response.ok) setFeedback(json.data);
-  }
-  async function vote(value: 1 | -1) {
-    if (!isAuthenticated) {
-      setMessage("Log in to vote on chapters.");
-      return;
-    }
-    setBusy(true);
-    const response = await fetch(`/api/chapters/${chapter.id}/feedback`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "vote", value }),
-    });
-    if (response.ok) await load();
-    setBusy(false);
-  }
-  async function submitComment(event: React.FormEvent) {
-    event.preventDefault();
-    if (!isAuthenticated) {
-      setMessage("Log in to comment on chapters.");
-      return;
-    }
-    if (!comment.trim()) return;
-    setBusy(true);
-    const response = await fetch(`/api/chapters/${chapter.id}/feedback`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "comment", body: comment }),
-    });
-    if (response.ok) {
-      setComment("");
-      await load();
-    }
-    setBusy(false);
-  }
+function ProfileSkeleton() {
   return (
-    <div className="mt-3 border-t border-border/40 pt-3">
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => vote(1)}
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
-        >
-          <ArrowUp className="size-4" />
-          {feedback?.score ?? chapter.score}
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => vote(-1)}
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
-        >
-          <ArrowDown className="size-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setOpen((value) => !value);
-            if (!feedback) void load();
-          }}
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <MessageCircle className="size-3.5" />
-          {feedback?.comments.length ?? chapter.commentCount} comments
-        </button>
-      </div>
-      {message && (
-        <p className="mt-2 text-xs text-muted-foreground">{message}</p>
-      )}
-      {open && (
-        <div className="mt-3 space-y-3">
-          {feedback?.comments.map((item) => (
-            <div
-              key={item.id}
-              className="rounded-md bg-muted/50 px-3 py-2 text-xs"
-            >
-              <p className="font-medium">{item.user.fullName}</p>
-              <p className="mt-1 text-muted-foreground">{item.body}</p>
-            </div>
-          ))}
-          {isAuthenticated ? (
-            <form onSubmit={submitComment} className="flex gap-2">
-              <Input
-                value={comment}
-                onChange={(event) => setComment(event.target.value)}
-                placeholder="Add a comment"
-                maxLength={1000}
-              />
-              <Button size="sm" disabled={busy || !comment.trim()}>
-                Post
-              </Button>
-            </form>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Log in to join the discussion.
-            </p>
-          )}
+    <main className="mx-auto max-w-6xl px-6 py-10">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[280px_1fr]">
+        <div>
+          <Skeleton className="size-32 rounded-full" />
+          <Skeleton className="mt-4 h-7 w-40" />
+          <Skeleton className="mt-2 h-4 w-24" />
+          <Separator className="my-4" />
+          <Skeleton className="h-4 w-36" />
+          <Skeleton className="mt-2 h-4 w-32" />
+          <Skeleton className="mt-2 h-4 w-28" />
         </div>
-      )}
-    </div>
+        <div>
+          <Skeleton className="h-6 w-24" />
+          <Separator className="my-3" />
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="mt-3 h-24 w-full" />
+        </div>
+      </div>
+    </main>
   );
 }
 
@@ -207,6 +91,7 @@ export default function PublicProfessorPage({
   const [error, setError] = useState("");
   const [rating, setRating] = useState(0);
   const [savingRating, setSavingRating] = useState(false);
+
   useEffect(() => {
     params.then(({ id }) =>
       fetch(`/api/professors/${id}`)
@@ -220,6 +105,7 @@ export default function PublicProfessorPage({
         .catch((reason) => setError(reason.message)),
     );
   }, [params]);
+
   async function saveRating(value: number) {
     if (!professor?.isAuthenticated) return;
     setRating(value);
@@ -231,218 +117,174 @@ export default function PublicProfessorPage({
     });
     setSavingRating(false);
   }
+
   if (error)
     return (
       <main className="mx-auto max-w-3xl px-6 py-20">
         <h1 className="text-2xl font-semibold">{error}</h1>
-        <Link className="mt-4 inline-block underline" href="/learn">
+        <Link className="mt-4 inline-block text-sm text-primary hover:underline" href="/learn">
           Back to courses
         </Link>
       </main>
     );
-  if (!professor)
-    return (
-      <main className="flex min-h-[70svh] items-center justify-center">
-        <Loader2 className="animate-spin" />
-      </main>
-    );
-  return (
-    <main className="mx-auto max-w-5xl px-6 py-12">
-      <Link
-        href="/learn"
-        className="text-sm text-muted-foreground hover:text-foreground"
-      >
-        Back to courses
-      </Link>
-      <section className="mt-8 flex flex-col gap-6 rounded-xl bg-muted/30 p-6 sm:flex-row sm:items-center">
-        <div className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-xl font-semibold">
-          {professor.avatarUrl ? (
-            <img
-              src={professor.avatarUrl}
-              alt={professor.fullName}
-              className="size-full object-cover"
-            />
-          ) : (
-            initials(professor.fullName)
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs uppercase tracking-[0.16em] text-primary">
-            Professor profile
-          </p>
-          <h1 className="mt-2 text-3xl font-semibold">{professor.fullName}</h1>
-          <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-            <CalendarDays className="size-4" />
-            Teaching since {formatDate(professor.memberSince)}
-          </p>
-        </div>
-        {professor.isOwner ? (
-          <div className="rounded-lg bg-primary/10 p-4 text-sm">
-            <p className="font-medium">This is your public profile.</p>
-            <p className="mt-1 text-muted-foreground">
-              Students can discover your courses and join the discussion here.
-            </p>
-            <Button asChild variant="outline" size="sm" className="mt-3">
-              <Link href="/profile">Edit profile</Link>
-            </Button>
-          </div>
-        ) : !professor.isAuthenticated ? (
-          <div className="rounded-lg bg-muted/60 p-4 text-sm">
-            <p className="font-medium">Want to rate or discuss a chapter?</p>
-            <p className="mt-1 text-muted-foreground">
-              Log in to join the learning community.
-            </p>
-            <Button asChild size="sm" className="mt-3">
-              <Link href="/register?mode=login">Log in</Link>
-            </Button>
-          </div>
-        ) : null}
-      </section>
-      <div className="mt-6 grid gap-3 sm:grid-cols-3">
-        <Stat
-          label="Courses"
-          value={professor.stats.courseCount}
-          icon={<BookOpen className="size-4" />}
-        />
-        <Stat
-          label="Chapters"
-          value={professor.stats.chapterCount}
-          icon={<MessageCircle className="size-4" />}
-        />
-        <Stat
-          label="Rating"
-          value={
-            professor.stats.averageRating
-              ? `${professor.stats.averageRating}/5`
-              : "New"
-          }
-          icon={<Star className="size-4" />}
-        />
-      </div>
-      <section className="mt-8 rounded-xl bg-muted/30 p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold">Student rating</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {professor.stats.ratingCount} rating
-              {professor.stats.ratingCount === 1 ? "" : "s"}
-            </p>
-          </div>
-          {professor.isOwner ? (
-            <span className="text-sm text-muted-foreground">
-              You cannot rate your own profile.
-            </span>
-          ) : professor.isAuthenticated ? (
-            <div className="flex items-center gap-1">
-              {[1, 2, 3, 4, 5].map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  disabled={savingRating}
-                  onClick={() => void saveRating(value)}
-                  aria-label={`Rate ${value} stars`}
-                  className={
-                    value <= rating
-                      ? "text-amber-500"
-                      : "text-muted-foreground/30"
-                  }
-                >
-                  <Star className="size-5 fill-current" />
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              <span className="text-sm text-muted-foreground">
-                Log in to rate
-              </span>
-              <Button asChild size="sm" variant="outline">
-                <Link href="/register?mode=login">Login</Link>
-              </Button>
-            </div>
-          )}
-        </div>
-      </section>
-      <section className="mt-8 space-y-4">
-        <h2 className="text-xl font-semibold">
-          Courses by {professor.fullName}
-        </h2>
-        {professor.courses.map((course) => (
-          <Card key={course.id} className="border-0 bg-card p-5 shadow-none">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="flex flex-wrap gap-2">
-                  {course.categories.map((category) => (
-                    <span
-                      key={category}
-                      className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground"
-                    >
-                      {category}
-                    </span>
-                  ))}
-                </div>
-                <h3 className="mt-3 text-lg font-semibold">{course.title}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {course.description}
-                </p>
-              </div>
-              <Button asChild size="sm">
-                <Link href={`/learn/${course.id}`}>Open course</Link>
-              </Button>
-            </div>
-            <div className="mt-5 space-y-2">
-              {course.chapters.map((chapter) => (
-                <div key={chapter.id} className="rounded-lg bg-muted/30 p-3">
-                  <div className="flex items-center gap-3">
-                    <span className="flex size-7 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                      {chapter.order}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">
-                        {chapter.title}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {formatDuration(chapter.durationSeconds)} ·{" "}
-                        {chapter.videoStatus === "READY"
-                          ? "Ready"
-                          : "Processing"}
-                      </p>
-                    </div>
-                  </div>
-                  <ChapterFeedback
-                    chapter={chapter}
-                    isAuthenticated={professor.isAuthenticated}
-                  />
-                </div>
-              ))}
-            </div>
-          </Card>
-        ))}
-      </section>
-      <p className="mt-10 text-center text-xs text-muted-foreground">
-        <Check className="mr-1 inline size-3.5" />
-        Public profile · Course content remains protected by pack access.
-      </p>
-    </main>
-  );
-}
 
-function Stat({
-  label,
-  value,
-  icon,
-}: {
-  label: string;
-  value: string | number;
-  icon: React.ReactNode;
-}) {
+  if (!professor) return <ProfileSkeleton />;
+
   return (
-    <div className="flex items-center gap-3 rounded-lg bg-muted/30 p-4">
-      <span className="text-primary">{icon}</span>
-      <div>
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="mt-1 text-lg font-semibold">{value}</p>
+    <main className="mx-auto max-w-6xl px-6 py-10">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[280px_1fr]">
+        {/* Left sidebar, GitHub profile style */}
+        <aside className="lg:sticky lg:top-10 lg:self-start">
+          <Avatar className="size-32">
+            <AvatarImage src={professor.avatarUrl ?? undefined} alt={professor.fullName} />
+            <AvatarFallback className="text-2xl">
+              {initials(professor.fullName)}
+            </AvatarFallback>
+          </Avatar>
+
+          <h1 className="mt-4 text-2xl font-bold leading-tight text-foreground">
+            {professor.fullName}
+          </h1>
+          <p className="mt-1 text-lg font-light text-muted-foreground">
+            Professor
+          </p>
+
+          {professor.bio && <p className="mt-4 text-sm leading-6 text-muted-foreground">{professor.bio}</p>}
+          {professor.specialties && <p className="mt-3 text-xs font-medium uppercase tracking-wide text-primary">{professor.specialties}</p>}
+          {professor.websiteUrl && <a href={professor.websiteUrl} target="_blank" rel="noreferrer" className="mt-3 block text-sm text-primary hover:underline">Visit website</a>}
+
+          {professor.isOwner ? (
+            <Button asChild variant="outline" className="mt-4 w-full">
+              <Link href="/settings">Edit profile</Link>
+            </Button>
+          ) : !professor.isAuthenticated ? (
+            <Button asChild className="mt-4 w-full">
+              <Link href="/register?mode=login">Log in to interact</Link>
+            </Button>
+          ) : null}
+
+          <Separator className="mt-5" />
+
+          <ul className="mt-4 space-y-2.5 text-sm text-muted-foreground">
+            <li className="flex items-center gap-2">
+              <CalendarDays className="size-4 shrink-0" />
+              Teaching since {formatDate(professor.memberSince)}
+            </li>
+            <li className="flex items-center gap-2">
+              <BookOpen className="size-4 shrink-0" />
+              <span className="font-semibold text-foreground">
+                {professor.stats.courseCount}
+              </span>
+              courses ·
+              <span className="font-semibold text-foreground">
+                {professor.stats.chapterCount}
+              </span>
+              chapters
+            </li>
+            <li className="flex items-center gap-2">
+              <Star className="size-4 shrink-0" />
+              {professor.stats.averageRating ? (
+                <>
+                  <span className="font-semibold text-foreground">
+                    {professor.stats.averageRating}
+                  </span>
+                  / 5 from {professor.stats.ratingCount} rating
+                  {professor.stats.ratingCount === 1 ? "" : "s"}
+                </>
+              ) : (
+                "No ratings yet"
+              )}
+            </li>
+          </ul>
+
+          <Separator className="mt-5" />
+
+          <div className="mt-4">
+            {professor.isOwner ? (
+              <p className="text-xs text-muted-foreground">
+                You can&apos;t rate your own profile.
+              </p>
+            ) : professor.isAuthenticated ? (
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    disabled={savingRating}
+                    onClick={() => void saveRating(value)}
+                    aria-label={`Rate ${value} stars`}
+                    className={
+                      value <= rating
+                        ? "text-amber-500 transition-colors"
+                        : "text-muted-foreground/30 transition-colors hover:text-amber-500/60"
+                    }
+                  >
+                    <Star className="size-5 fill-current" />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Log in to rate this professor.
+              </p>
+            )}
+          </div>
+        </aside>
+
+        {/* Right column: courses list */}
+        <section className="min-w-0">
+          <h2 className="text-base font-semibold text-foreground">Courses</h2>
+          <Separator className="mt-2" />
+
+          {professor.courses.length === 0 ? (
+            <p className="py-6 text-sm text-muted-foreground">
+              {professor.fullName} hasn&apos;t published any courses yet.
+            </p>
+          ) : (
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              {professor.courses.map((course) => (
+                <Card key={course.id} className="flex flex-col">
+                  <CardHeader className="space-y-1.5">
+                    <CardTitle className="text-base">
+                      <Link
+                        href={`/learn/${course.id}`}
+                        className="text-primary hover:underline"
+                      >
+                        {course.title}
+                      </Link>
+                    </CardTitle>
+                    {course.description && (
+                      <CardDescription className="line-clamp-2">
+                        {course.description}
+                      </CardDescription>
+                    )}
+                  </CardHeader>
+                  <CardContent className="mt-auto flex items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {course.categories.slice(0, 2).map((category) => (
+                        <Badge key={category} variant="secondary">
+                          {category}
+                        </Badge>
+                      ))}
+                      <Badge variant="outline" className="gap-1 font-normal">
+                        <BookOpen className="size-3" />
+                        {course.chapterCount}
+                      </Badge>
+                    </div>
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={`/learn/${course.id}`}>Open</Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          <p className="mt-8 text-xs text-muted-foreground">
+            Public profile — course content remains protected by pack access.
+          </p>
+        </section>
       </div>
-    </div>
+    </main>
   );
 }

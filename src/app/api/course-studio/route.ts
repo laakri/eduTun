@@ -40,7 +40,7 @@ export const GET = withErrorHandler(async (req) => {
             : VideoStatus.PROCESSING;
         await db.chapter.update({
           where: { id: chapter.id },
-          data: { videoStatus, ready: videoStatus === VideoStatus.READY },
+          data: { videoStatus },
         });
         return {
           ...chapter,

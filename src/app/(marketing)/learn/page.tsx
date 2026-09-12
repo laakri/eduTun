@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Search,
@@ -46,10 +45,10 @@ type CourseVM = {
 };
 
 const coverTones = [
-  "from-primary/90 to-primary/50",
-  "from-muted-foreground/80 to-muted-foreground/40",
-  "from-primary/70 to-primary/30",
-  "from-foreground/80 to-foreground/40",
+  "bg-muted",
+  "bg-secondary",
+  "bg-accent",
+  "bg-muted/70",
 ] as const;
 
 function initials(name: string): string {
@@ -106,20 +105,20 @@ function CourseCover({
     <button
       type="button"
       onClick={onClick}
-      className={`group relative flex w-full items-center justify-center overflow-hidden bg-gradient-to-br ${coverTone(
+      className={`group relative flex w-full items-center justify-center overflow-hidden ${coverTone(
         course,
       )} ${featured ? "h-48" : "h-36"}`}
     >
-      <div className="absolute inset-0 bg-background/5 transition-colors duration-300 group-hover:bg-background/0" />
+      <div className="absolute inset-0 bg-foreground/[0.03] transition-colors duration-300 group-hover:bg-foreground/[0.06]" />
 
       <PlayCircle
-        className={`relative text-primary-foreground transition-transform duration-300 group-hover:scale-110 ${
+        className={`relative text-foreground/70 transition-transform duration-300 group-hover:scale-110 ${
           featured ? "h-12 w-12" : "h-10 w-10"
         }`}
         strokeWidth={1.5}
       />
 
-      <span className="absolute bottom-3 right-3 rounded-md bg-background/90 px-2 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur-sm">
+      <span className="absolute bottom-3 right-3 rounded-md bg-background/90 px-2 py-1 text-xs font-medium text-foreground shadow-sm">
         {formatDuration(courseDuration(course))}
       </span>
     </button>
@@ -129,8 +128,15 @@ function CourseCover({
 export default function BrowseCoursesPage() {
   const [courses, setCourses] = useState<CourseVM[]>([]);
   const [hasActivePack, setHasActivePack] = useState<boolean>(false);
+  const [needsCategorySelection, setNeedsCategorySelection] = useState(false);
+  const [categorySelectionSubscriptionId, setCategorySelectionSubscriptionId] = useState<string | null>(null);
+  const [availableCategories, setAvailableCategories] = useState<Array<{ id: string; name: string; slug: string }>>([]);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
+  const [approvedAccess, setApprovedAccess] = useState<{ bacTypeName: string | null; planName: string } | null>(null);
+  const [savingCategories, setSavingCategories] = useState(false);
   const [query, setQuery] = useState<string>("");
   const [activeCategory, setActiveCategory] = useState<string>("Toutes");
+  const [activeProfessor, setActiveProfessor] = useState<string>("Tous les profs");
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(
     null,
   );
@@ -160,6 +166,16 @@ export default function BrowseCoursesPage() {
 
         setCourses(json.data?.courses ?? []);
         setHasActivePack(json.data?.hasActivePack ?? false);
+        setNeedsCategorySelection(json.data?.needsCategorySelection ?? false);
+        setCategorySelectionSubscriptionId(json.data?.categorySelectionSubscriptionId ?? null);
+        setAvailableCategories(json.data?.availableCategories ?? []);
+        setApprovedAccess(json.data?.subscriptions?.[0] ?? null);
+        setSelectedCategoryIds(
+          json.data?.subscriptions?.find(
+            (subscription: { id: string; selectedCategoryIds: string[] }) =>
+              subscription.id === json.data?.categorySelectionSubscriptionId,
+          )?.selectedCategoryIds ?? [],
+        );
       } catch (reason: unknown) {
         if (cancelled) {
           return;
@@ -184,12 +200,39 @@ export default function BrowseCoursesPage() {
     };
   }, []);
 
+  async function saveCategorySelection() {
+    if (!categorySelectionSubscriptionId || selectedCategoryIds.length === 0) return;
+    setSavingCategories(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/subscriptions/${categorySelectionSubscriptionId}/categories`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categoryIds: selectedCategoryIds }),
+      });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json.error?.message ?? "Could not save your categories.");
+      window.location.reload();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not save your categories.");
+    } finally {
+      setSavingCategories(false);
+    }
+  }
+
   const categoryList = useMemo<string[]>(() => {
     return [
       "Toutes",
       ...new Set(
         courses.flatMap((course: CourseVM) => course.categories),
       ),
+    ];
+  }, [courses]);
+
+  const professorList = useMemo<string[]>(() => {
+    return [
+      "Tous les profs",
+      ...new Set(courses.map((course: CourseVM) => course.prof.name)),
     ];
   }, [courses]);
 
@@ -206,7 +249,9 @@ export default function BrowseCoursesPage() {
       .filter(
         (course: CourseVM) =>
           course.title.toLowerCase().includes(normalizedQuery) ||
-          course.prof.name.toLowerCase().includes(normalizedQuery),
+          course.prof.name.toLowerCase().includes(normalizedQuery) ||
+          course.tags.some((tag) => tag.toLowerCase().includes(normalizedQuery)) ||
+          course.chapters.some((chapter) => chapter.title.toLowerCase().includes(normalizedQuery)),
       )
       .slice(0, 5)
       .map((course: CourseVM) => ({
@@ -227,11 +272,17 @@ export default function BrowseCoursesPage() {
       const matchesQuery =
         normalizedQuery.length < 2 ||
         course.title.toLowerCase().includes(normalizedQuery) ||
-        course.prof.name.toLowerCase().includes(normalizedQuery);
+        course.prof.name.toLowerCase().includes(normalizedQuery) ||
+        course.tags.some((tag) => tag.toLowerCase().includes(normalizedQuery)) ||
+        course.chapters.some((chapter) => chapter.title.toLowerCase().includes(normalizedQuery));
 
-      return matchesCategory && matchesQuery;
+      const matchesProfessor =
+        activeProfessor === "Tous les profs" ||
+        course.prof.name === activeProfessor;
+
+      return matchesCategory && matchesProfessor && matchesQuery;
     });
-  }, [activeCategory, courses, query]);
+  }, [activeCategory, activeProfessor, courses, query]);
 
   const selectedCourse =
     courses.find((course: CourseVM) => course.id === selectedCourseId) ??
@@ -277,6 +328,47 @@ export default function BrowseCoursesPage() {
   }
 
   if (courses.length === 0) {
+    if (needsCategorySelection) {
+      return (
+        <main className="mx-auto max-w-3xl px-6 py-20">
+          <p className="text-sm font-medium text-primary">Your Bac access is approved</p>
+          <h1 className="mt-3 text-3xl font-semibold tracking-tight">Choose your subjects</h1>
+          <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
+            Select the categories you want to study. Your learning space will show the matching courses, chapters, and professors.
+          </p>
+          {approvedAccess && (
+            <div className="mt-6 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
+              <p className="font-medium">{approvedAccess.bacTypeName ?? "Approved Bac access"}</p>
+              <p className="mt-1 text-muted-foreground">Subscription: {approvedAccess.planName}</p>
+            </div>
+          )}
+          <div className="mt-8 grid gap-3 sm:grid-cols-2">
+            {availableCategories.map((category) => {
+              const selected = selectedCategoryIds.includes(category.id);
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => setSelectedCategoryIds((current) => selected ? current.filter((id) => id !== category.id) : [...current, category.id])}
+                  className={`flex items-center justify-between rounded-xl border p-4 text-left transition ${selected ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"}`}
+                >
+                  <span>
+                    <span className="block text-sm font-medium">{category.name}</span>
+                    <span className="mt-1 block text-xs text-muted-foreground">Browse courses in this category</span>
+                  </span>
+                  {selected && <CircleCheck className="size-5 shrink-0 text-primary" />}
+                </button>
+              );
+            })}
+          </div>
+          <Button className="mt-8" onClick={() => void saveCategorySelection()} disabled={savingCategories || selectedCategoryIds.length === 0}>
+            {savingCategories ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+            Continue to my courses
+          </Button>
+        </main>
+      );
+    }
+
     return (
       <main className="mx-auto max-w-3xl px-6 py-20">
         <div className="max-w-xl">
@@ -305,7 +397,7 @@ export default function BrowseCoursesPage() {
   return (
     <main className="min-h-screen bg-background text-foreground">
       {/* Hero */}
-      <section className="border-b">
+      <section>
         <div className="mx-auto grid max-w-6xl gap-12 px-6 py-14 sm:py-16 lg:grid-cols-[1fr_420px] lg:items-center lg:gap-20">
           <div>
             <p className="text-sm font-medium text-primary">
@@ -328,7 +420,7 @@ export default function BrowseCoursesPage() {
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Cherche un cours ou un prof…"
+                placeholder="Cours, chapitre, prof ou mot-clé…"
                 className="h-12 rounded-lg bg-background pl-10 shadow-sm"
               />
 
@@ -383,7 +475,7 @@ export default function BrowseCoursesPage() {
 
           {/* Featured */}
           {featuredCourse && (
-            <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+            <div className="overflow-hidden rounded-lg border border-border bg-muted/40">
               <CourseCover
                 course={featuredCourse}
                 featured
@@ -435,18 +527,33 @@ export default function BrowseCoursesPage() {
         id="cours"
         className="mx-auto max-w-6xl px-6 py-14 sm:py-16"
       >
-        <div className="flex flex-col gap-5 border-b pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-5 pb-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-2xl font-semibold tracking-tight">
               My courses
             </h2>
 
             <p className="mt-1 text-sm text-muted-foreground">
-              Continue where you left off.
+              {filteredCourses.length} course{filteredCourses.length === 1 ? "" : "s"} match your filters.
             </p>
           </div>
 
-          <div className="flex max-w-full gap-5 overflow-x-auto">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <label className="sr-only" htmlFor="professor-filter">Filter by professor</label>
+            <select
+              id="professor-filter"
+              value={activeProfessor}
+              onChange={(event) => setActiveProfessor(event.target.value)}
+              className="h-9 rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none focus:border-primary"
+            >
+              {professorList.map((professor) => (
+                <option key={professor}>{professor}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-4 flex max-w-full gap-5 overflow-x-auto pb-3">
             {categoryList.map((category: string) => {
               const active = activeCategory === category;
 
@@ -464,12 +571,11 @@ export default function BrowseCoursesPage() {
                   {category}
 
                   {active && (
-                    <span className="absolute -bottom-px left-0 h-0.5 w-full bg-primary" />
+                    <span className="absolute -bottom-3 left-0 h-0.5 w-full bg-primary" />
                   )}
                 </button>
               );
             })}
-          </div>
         </div>
 
         {filteredCourses.length === 0 ? (
@@ -489,9 +595,9 @@ export default function BrowseCoursesPage() {
                   key={course.id}
                   type="button"
                   onClick={() => openCourse(course.id)}
-                  className={`group flex min-w-0 flex-col overflow-hidden rounded-xl border bg-card text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+                  className={`group flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-muted/20 text-left transition-colors duration-200 hover:bg-muted/50 ${
                     selectedCourseId === course.id
-                      ? "border-primary ring-1 ring-primary"
+                      ? "bg-muted/60 ring-1 ring-primary/40"
                       : ""
                   }`}
                 >
@@ -529,7 +635,7 @@ export default function BrowseCoursesPage() {
                       </Link>
                     </div>
 
-                    <Separator className="my-4" />
+                    <div className="my-4 h-px bg-muted" />
 
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span className="flex items-center gap-1.5">
@@ -567,7 +673,7 @@ export default function BrowseCoursesPage() {
         className="mx-auto max-w-6xl scroll-mt-8 px-6 pb-24"
       >
         {!selectedCourse ? (
-          <div className="rounded-xl border border-dashed p-10 text-center">
+          <div className="rounded-lg bg-muted/30 p-10 text-center">
             <BookOpen className="mx-auto h-5 w-5 text-muted-foreground" />
 
             <p className="mt-3 text-sm text-muted-foreground">
@@ -575,9 +681,9 @@ export default function BrowseCoursesPage() {
             </p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+          <div className="overflow-hidden rounded-lg border border-border bg-muted/20">
             {/* Course header */}
-            <div className="border-b bg-muted/30 p-6 sm:p-8">
+            <div className="bg-muted/40 p-6 sm:p-8">
               <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
                 <div className="max-w-2xl">
                   <div className="flex flex-wrap items-center gap-2">
@@ -656,7 +762,7 @@ export default function BrowseCoursesPage() {
                   return (
                     <li
                       key={chapter.id}
-                      className="flex items-center gap-4 rounded-lg border p-3.5 transition-colors hover:bg-muted/40"
+                      className="flex items-center gap-4 rounded-md border border-border bg-muted/30 p-3.5 transition-colors hover:bg-muted/60"
                     >
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
                         {chapter.order}

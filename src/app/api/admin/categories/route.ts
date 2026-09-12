@@ -16,13 +16,30 @@ export const POST = withErrorHandler(async (req) => {
   await requireRole("admin");
 
   const body = await parseBody(req, createCategorySchema);
+
+  if (body.parentId) {
+    const parent = await db.category.findUnique({
+      where: { id: body.parentId },
+      select: { id: true },
+    });
+    if (!parent) throw new Error("Parent category not found.");
+  }
+
   const category = await db.category.create({
     data: {
       slug: body.slug,
       name: body.name,
-      ...(body.parentId ? { parentId: body.parentId } : {}),
     },
   });
+
+  if (body.parentId) {
+    await db.categoryRelation.create({
+      data: {
+        parentId: body.parentId,
+        childId: category.id,
+      },
+    });
+  }
 
   return ok(category, 201);
 });

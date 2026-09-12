@@ -814,7 +814,6 @@ export default function LearnCoursePage() {
                   avatarUrl={course.owner.avatarUrl}
                   size="sm"
                 />
-                <span>By</span>
                 <span className="font-medium text-foreground">
                   {course.owner.fullName}
                 </span>
