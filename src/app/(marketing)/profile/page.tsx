@@ -3,9 +3,13 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   Camera,
+  ArrowRight,
+  BookOpen,
+  CheckCircle2,
   Loader2,
   Mail,
-  Phone,
+  Flame,
+  Target,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -22,6 +26,30 @@ type Profile = {
   roles: string[];
 };
 
+type StudentProgress = {
+  completedChapters: number;
+  inProgressChapters: number;
+  overallCompletion: number;
+  streak: number;
+  activeDays: number;
+  activityDates: string[];
+  nextUp: {
+    courseId: string;
+    courseTitle: string;
+    chapterTitle: string | null;
+    chapterId: string | null;
+  } | null;
+  courseProgress: Array<{
+    courseId: string;
+    courseTitle: string;
+    totalChapters: number;
+    completedChapters: number;
+    percent: number;
+    nextChapter: string | null;
+    nextChapterId: string | null;
+  }>;
+};
+
 function initials(name: string) {
   return name
     .trim()
@@ -31,17 +59,11 @@ function initials(name: string) {
     .join("");
 }
 
-function formatMemberSince(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: "long",
-    year: "numeric",
-  });
-}
-
 export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [studentProgress, setStudentProgress] = useState<StudentProgress | null>(null);
 
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -65,6 +87,13 @@ export default function ProfilePage() {
           setProfile(data);
           setFullName(data.fullName);
           setPhone(data.phone ?? "");
+          if (!data.roles.some((role) => ["prof", "admin"].includes(role))) {
+            const progressResponse = await fetch("/api/learning/catalog", { credentials: "include" });
+            if (progressResponse.ok) {
+              const progressJson = await progressResponse.json();
+              setStudentProgress(progressJson.data?.studentProgress ?? null);
+            }
+          }
         }
       } catch {
         if (!cancelled)
@@ -176,7 +205,84 @@ export default function ProfilePage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-2xl px-4 py-10 sm:py-14">
+    <main className="mx-auto w-full max-w-5xl px-4 py-10 sm:py-14">
+      {studentProgress && (
+        <section className="mb-10 border-b border-border pb-10">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-sm font-medium text-primary">Student profile</p>
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight">Your learning space</h1>
+              <p className="mt-2 text-sm text-muted-foreground">A quiet record of the work you are building, one lesson at a time.</p>
+            </div>
+            {studentProgress.nextUp && (
+              <Button asChild size="sm">
+                <a href={studentProgress.nextUp.chapterId ? `/learn/${studentProgress.nextUp.courseId}?chapter=${studentProgress.nextUp.chapterId}` : `/learn/${studentProgress.nextUp.courseId}`}>
+                  Continue learning <ArrowRight className="ml-2 size-4" />
+                </a>
+              </Button>
+            )}
+          </div>
+
+          <div className="mt-7 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="flex items-center justify-between text-muted-foreground"><span className="text-xs">Completion</span><Target className="size-4" /></div>
+              <p className="mt-2 text-2xl font-semibold">{studentProgress.overallCompletion}%</p>
+              <p className="mt-1 text-xs text-muted-foreground">Across tracked lessons</p>
+            </div>
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="flex items-center justify-between text-muted-foreground"><span className="text-xs">Chapters finished</span><CheckCircle2 className="size-4" /></div>
+              <p className="mt-2 text-2xl font-semibold">{studentProgress.completedChapters}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Knowledge banked</p>
+            </div>
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="flex items-center justify-between text-muted-foreground"><span className="text-xs">Current streak</span><Flame className="size-4" /></div>
+              <p className="mt-2 text-2xl font-semibold">{studentProgress.streak} days</p>
+              <p className="mt-1 text-xs text-muted-foreground">{studentProgress.activeDays} active days total</p>
+            </div>
+          </div>
+
+          <div className="mt-5 rounded-xl border border-border bg-card p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-sm font-semibold">Learning activity</h2>
+                <p className="mt-1 text-xs text-muted-foreground">Your consistency over the last year</p>
+              </div>
+              <span className="text-xs text-muted-foreground">{studentProgress.activeDays} active days</span>
+            </div>
+            <div className="mt-4 flex gap-1.5 overflow-hidden">
+              {Array.from({ length: 52 }, (_, week) => (
+                <div key={week} className="grid shrink-0 gap-1" style={{ gridTemplateRows: "repeat(7, 10px)" }}>
+                  {Array.from({ length: 7 }, (_, day) => {
+                    const date = new Date();
+                    date.setDate(date.getDate() - ((51 - week) * 7 + (6 - day)));
+                    const active = studentProgress.activityDates.includes(date.toISOString().slice(0, 10));
+                    return <span key={day} className={`size-2.5 rounded-[3px] ${active ? "bg-primary" : "bg-muted"}`} />;
+                  })}
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground">
+              <span>Less</span>
+              <span className="flex items-center gap-1"><span className="size-2.5 rounded-[3px] bg-muted" /><span className="size-2.5 rounded-[3px] bg-primary/40" /><span className="size-2.5 rounded-[3px] bg-primary" />More</span>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 lg:grid-cols-2">
+            {studentProgress.courseProgress.map((course) => (
+              <div key={course.courseId} className="rounded-xl border border-border bg-card p-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex min-w-0 items-center gap-3"><div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted"><BookOpen className="size-4 text-muted-foreground" /></div><p className="truncate text-sm font-medium">{course.courseTitle}</p></div>
+                  <span className="text-xs font-semibold">{course.percent}%</span>
+                </div>
+                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary" style={{ width: `${course.percent}%` }} /></div>
+                <div className="mt-2 flex items-center justify-between gap-3 text-xs text-muted-foreground"><span>{course.completedChapters}/{course.totalChapters} chapters</span><a className="font-medium text-foreground hover:text-primary" href={course.nextChapterId ? `/learn/${course.courseId}?chapter=${course.nextChapterId}` : `/learn/${course.courseId}`}>{course.nextChapter ? "Resume" : "Review"}</a></div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div className="mx-auto max-w-2xl">
       <form onSubmit={handleSaveDetails} className="space-y-8">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
@@ -290,6 +396,7 @@ export default function ProfilePage() {
           </Button>
         </div>
       </form>
+      </div>
     </main>
   );
 }

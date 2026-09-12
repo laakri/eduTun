@@ -289,7 +289,6 @@ export default function BrowseCoursesPage() {
     null;
 
   const featuredCourse = courses[0] ?? null;
-
   function openCourse(id: string): void {
     setSelectedCourseId(id);
 
@@ -401,16 +400,15 @@ export default function BrowseCoursesPage() {
         <div className="mx-auto grid max-w-6xl gap-12 px-6 py-14 sm:py-16 lg:grid-cols-[1fr_420px] lg:items-center lg:gap-20">
           <div>
             <p className="text-sm font-medium text-primary">
-              {courses.length} cours · tes packs actifs
+              {courses.length} courses · active learning
             </p>
 
             <h1 className="mt-3 max-w-2xl text-4xl font-semibold tracking-tight sm:text-5xl">
-              Apprends à ton rythme.
+              Learn at your own pace.
             </h1>
 
             <p className="mt-5 max-w-xl text-[15px] leading-7 text-muted-foreground">
-              Retrouve les cours inclus dans tes packs, avec leurs chapitres,
-              quiz et ressources.
+              Explore your enrolled courses, jump back into your progress, and keep momentum with a clear view of what is next.
             </p>
 
             {/* Search */}
@@ -723,6 +721,7 @@ export default function BrowseCoursesPage() {
                       </p>
                     </div>
                   </div>
+
                 </div>
 
                 <Button

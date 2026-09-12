@@ -26,7 +26,7 @@ function collectDescendantCategoryIds(
 
 export const GET = withErrorHandler(async () => {
   const user = await requireUser();
-  const [courses, activeSubscriptions, categories, categoryRows] = await Promise.all([
+  const [courses, activeSubscriptions, categories, categoryRows, progressEntries] = await Promise.all([
     db.course.findMany({
       where: { published: true },
       include: {
@@ -59,6 +59,21 @@ export const GET = withErrorHandler(async () => {
     }),
     db.categoryRelation.findMany({ select: { parentId: true, childId: true } }),
     db.category.findMany({ select: { id: true, name: true, slug: true } }),
+    db.videoProgress.findMany({
+      where: { userId: user.id },
+      orderBy: { updatedAt: "desc" },
+      include: {
+        chapter: {
+          select: {
+            id: true,
+            title: true,
+            order: true,
+            courseId: true,
+            course: { select: { id: true, title: true } },
+          },
+        },
+      },
+    }),
   ]);
 
   const categoryLinks = categories;
@@ -138,10 +153,89 @@ export const GET = withErrorHandler(async () => {
       })),
     }));
 
+  const courseProgress = accessibleCourses.map((course) => {
+    const entries = progressEntries.filter((entry) => entry.chapter.courseId === course.id);
+    const totalChapters = course.chapters.length;
+    const completedChapters = entries.filter((entry) => entry.completed).length;
+    const startedChapters = entries.filter((entry) => entry.watchedSeconds > 0 || entry.completed).length;
+    const nextChapter = course.chapters
+      .map((chapter) => ({
+        id: chapter.id,
+        title: chapter.title,
+        progress: entries.find((entry) => entry.chapterId === chapter.id),
+      }))
+      .find((chapter) => !chapter.progress?.completed) ?? null;
+
+    return {
+      courseId: course.id,
+      courseTitle: course.title,
+      totalChapters,
+      completedChapters,
+      startedChapters,
+      percent: totalChapters > 0 ? Math.round((completedChapters / totalChapters) * 100) : 0,
+      nextChapter: nextChapter?.title ?? null,
+      nextChapterId: nextChapter?.id ?? null,
+    };
+  });
+
+  const completedChapters = progressEntries.filter((entry) => entry.completed).length;
+  const inProgressChapters = progressEntries.filter((entry) => !entry.completed && entry.watchedSeconds > 0).length;
+  const totalTrackedChapters = progressEntries.length;
+  const overallCompletion = totalTrackedChapters > 0 ? Math.round((completedChapters / totalTrackedChapters) * 100) : 0;
+  const activityDays = [...new Set(progressEntries.map((entry) => entry.updatedAt.toISOString().slice(0, 10)))].sort().reverse();
+  let streak = 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (let index = 0; index < activityDays.length; index += 1) {
+    const day = new Date(`${activityDays[index]}T00:00:00`);
+    const expected = new Date(today);
+    expected.setDate(today.getDate() - index);
+    if (day.getTime() !== expected.getTime()) break;
+    streak += 1;
+  }
+  const nextUp = courseProgress
+    .filter((item) => item.completedChapters < item.totalChapters)
+    .sort((a, b) => a.percent - b.percent)[0] ?? null;
+
   const hasActiveSubscription = activeSubscriptions.length > 0;
 
   return ok({
     courses: accessibleCourses,
+    studentProgress: {
+      totalCourses: new Set(progressEntries.map((entry) => entry.chapter.courseId)).size,
+      completedChapters,
+      inProgressChapters,
+      overallCompletion,
+      streak,
+      activeDays: activityDays.length,
+      activityDates: activityDays,
+      recentActivity: progressEntries.slice(0, 8).map((entry) => ({
+        id: entry.id,
+        courseId: entry.chapter.courseId,
+        courseTitle: entry.chapter.course.title,
+        chapterId: entry.chapter.id,
+        chapterTitle: entry.chapter.title,
+        completed: entry.completed,
+        watchedSeconds: entry.watchedSeconds,
+        updatedAt: entry.updatedAt,
+      })),
+      milestones: [
+        { id: "first-step", label: "First step", detail: "Complete your first chapter", unlocked: completedChapters >= 1 },
+        { id: "deep-focus", label: "Deep focus", detail: "Complete five chapters", unlocked: completedChapters >= 5 },
+        { id: "steady-rhythm", label: "Steady rhythm", detail: "Study three days in a row", unlocked: streak >= 3 },
+        { id: "course-finish", label: "Course finisher", detail: "Complete an entire course", unlocked: courseProgress.some((item) => item.totalChapters > 0 && item.completedChapters === item.totalChapters) },
+      ],
+      nextUp: nextUp
+        ? {
+            courseId: nextUp.courseId,
+            courseTitle: nextUp.courseTitle,
+            chapterTitle: nextUp.nextChapter,
+            chapterId: nextUp.nextChapterId,
+            percent: nextUp.percent,
+          }
+        : null,
+      courseProgress,
+    },
     hasActivePack: hasActiveSubscription,
     hasActiveSubscription,
     needsCategorySelection: subscriptionsNeedingCategories.length > 0,

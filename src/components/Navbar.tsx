@@ -99,7 +99,7 @@ function initials(name?: string | null) {
     .join("");
 }
 
-function AccountMenu() {
+function AccountMenu({ isManager }: { isManager: boolean }) {
   const { data: session } = useSession();
   const name = session?.user?.name;
   const email = session?.user?.email;
@@ -144,12 +144,21 @@ function AccountMenu() {
         )}
 
         <DropdownMenuGroup>
-          <DropdownMenuItem render={<Link href="/dashboard" className="flex items-center gap-2" />}>
-            <LayoutDashboard className="h-4 w-4" />
-            Dashboard
-          </DropdownMenuItem>
+          {isManager && (
+            <DropdownMenuItem render={<Link href="/dashboard" className="flex items-center gap-2" />}>
+              <LayoutDashboard className="h-4 w-4" />
+              Dashboard
+            </DropdownMenuItem>
+          )}
 
-          <DropdownMenuItem render={<Link href="/professor/myid" className="flex items-center gap-2" />}>
+          {!isManager && (
+            <DropdownMenuItem render={<Link href="/learn" className="flex items-center gap-2" />}>
+              <BookOpen className="h-4 w-4" />
+              Check your courses
+            </DropdownMenuItem>
+          )}
+
+          <DropdownMenuItem render={<Link href={isManager ? "/professor/myid" : "/profile"} className="flex items-center gap-2" />}>
             <UserRound className="h-4 w-4" />
             Profile
           </DropdownMenuItem>
@@ -223,16 +232,7 @@ export default function Navbar() {
             <div className="hidden md:flex items-center gap-2">
               {isLoggedIn ? (
                 <>
-                  {!isManager && (
-                    <Link
-                      href="/learn"
-                      className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    >
-                      <BookOpen className="size-4" />
-                      My courses
-                    </Link>
-                  )}
-                  <AccountMenu />
+                  <AccountMenu isManager={isManager} />
                 </>
               ) : (
                 <>
@@ -298,19 +298,15 @@ export default function Navbar() {
                   <div className="flex flex-col gap-2.5">
                     {isLoading ? null : isLoggedIn ? (
                       <>
-                        <Link href="/learn">
-                          <Button variant="outline" className="h-11 w-full justify-start gap-2.5 text-[15px]">
-                            <BookOpen className="h-4 w-4" />
-                            My courses
-                          </Button>
-                        </Link>
-                        <Link href="/dashboard">
-                          <Button variant="outline" className="h-11 w-full justify-start gap-2.5 text-[15px]">
-                            <LayoutDashboard className="h-4 w-4" />
-                            Dashboard
-                          </Button>
-                        </Link>
-                        <Link href="/professor/myid">
+                        {!isManager && (
+                          <Link href="/learn">
+                            <Button variant="outline" className="h-11 w-full justify-start gap-2.5 text-[15px]">
+                              <BookOpen className="h-4 w-4" />
+                              Check your courses
+                            </Button>
+                          </Link>
+                        )}
+                        <Link href={isManager ? "/professor/myid" : "/profile"}>
                           <Button variant="outline" className="h-11 w-full justify-start gap-2.5 text-[15px]">
                             <UserRound className="h-4 w-4" />
                             Profile
