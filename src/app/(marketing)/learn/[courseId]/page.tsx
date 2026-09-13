@@ -22,6 +22,7 @@ import {
   Trash2,
 } from "lucide-react";
 import VideoPlayer from "@/components/video-player";
+import { useToast } from "@/components/toast-provider";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,6 +52,10 @@ type Chapter = {
   playbackUrl: string | null;
   sections: Section[];
   resources: Resource[];
+  progress: {
+    watchedSeconds: number;
+    completed: boolean;
+  };
 };
 
 type Course = {
@@ -443,6 +448,10 @@ export default function LearnCoursePage() {
   const [collapsedThreads, setCollapsedThreads] = useState<Set<string>>(
     new Set(),
   );
+  const toast = useToast();
+  const [watchedSeconds, setWatchedSeconds] = useState(0);
+  const [completed, setCompleted] = useState(false);
+  const progressSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -482,6 +491,11 @@ export default function LearnCoursePage() {
             ? requestedChapter
             : (loadedCourse.chapters[0]?.id ?? null),
         );
+        const initialChapter = loadedCourse.chapters.find(
+          (item: Chapter) => item.id === (requestedChapterExists ? requestedChapter : loadedCourse.chapters[0]?.id),
+        );
+        setWatchedSeconds(initialChapter?.progress.watchedSeconds ?? 0);
+        setCompleted(initialChapter?.progress.completed ?? false);
       } catch (cause: unknown) {
         if (cancelled) {
           return;
@@ -500,17 +514,62 @@ export default function LearnCoursePage() {
     };
   }, [courseId, requestedChapter]);
 
+  async function saveProgress(nextWatchedSeconds: number, nextCompleted = completed) {
+    if (!selectedId) return;
+    const response = await fetch("/api/learning/progress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chapterId: selectedId,
+        watchedSeconds: Math.round(nextWatchedSeconds),
+        completed: nextCompleted,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error("Could not save lesson progress.");
+    }
+  }
+
+  function queueProgressSave(seconds: number) {
+    setWatchedSeconds(seconds);
+    if (progressSaveTimer.current) clearTimeout(progressSaveTimer.current);
+    progressSaveTimer.current = setTimeout(() => {
+      void saveProgress(seconds).catch(() => {
+        toast("Could not save lesson progress.", "error");
+      });
+    }, 900);
+  }
+
+  async function markChapterComplete() {
+    setCompleted(true);
+    try {
+      await saveProgress(watchedSeconds, true);
+      toast("Lesson marked as complete");
+    } catch (cause: unknown) {
+      setCompleted(false);
+      toast(
+        cause instanceof Error ? cause.message : "Could not save lesson progress.",
+        "error",
+      );
+    }
+  }
+
+  useEffect(() => () => {
+    if (progressSaveTimer.current) clearTimeout(progressSaveTimer.current);
+  }, []);
+
   useEffect(() => {
     if (!selectedId) {
-      setComments([]);
-      setReplyTo(null);
-      setReplyBody("");
       return;
     }
 
     let cancelled = false;
-    setCommentsLoading(true);
-    setCommentError(null);
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setCommentsLoading(true);
+        setCommentError(null);
+      }
+    });
 
     fetch(`/api/chapters/${selectedId}/feedback`)
       .then(async (response) => {
@@ -561,7 +620,12 @@ export default function LearnCoursePage() {
 
       setViewerVote(value);
       setScore((current) => current - viewerVote + value);
+      toast("Thanks for rating this lesson");
     } catch (cause: unknown) {
+      toast(
+        cause instanceof Error ? cause.message : "Could not save your vote.",
+        "error",
+      );
       setCommentError(
         cause instanceof Error ? cause.message : "Could not save your vote.",
       );
@@ -593,7 +657,12 @@ export default function LearnCoursePage() {
         ...current,
       ]);
       setCommentBody("");
+      toast("Comment posted");
     } catch (cause: unknown) {
+      toast(
+        cause instanceof Error ? cause.message : "Could not post comment.",
+        "error",
+      );
       setCommentError(
         cause instanceof Error ? cause.message : "Could not post comment.",
       );
@@ -628,7 +697,12 @@ export default function LearnCoursePage() {
       ]);
       setReplyBody("");
       setReplyTo(null);
+      toast("Reply posted");
     } catch (cause: unknown) {
+      toast(
+        cause instanceof Error ? cause.message : "Could not post reply.",
+        "error",
+      );
       setCommentError(
         cause instanceof Error ? cause.message : "Could not post reply.",
       );
@@ -669,6 +743,7 @@ export default function LearnCoursePage() {
           : item,
       ),
     );
+    toast("Comment updated");
   }
 
   async function handleDeleteComment(commentId: string) {
@@ -694,6 +769,7 @@ export default function LearnCoursePage() {
           : item,
       ),
     );
+    toast("Comment deleted");
   }
 
   function toggleThread(commentId: string) {
@@ -847,6 +923,8 @@ export default function LearnCoursePage() {
                     title: section.title,
                     start: section.startSeconds,
                   }))}
+                  onTimeUpdate={queueProgressSave}
+                  onEnded={() => void markChapterComplete()}
                 />
               </div>
             ) : (
@@ -879,6 +957,15 @@ export default function LearnCoursePage() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={completed ? "secondary" : "outline"}
+                    onClick={() => void markChapterComplete()}
+                  >
+                    {completed ? "Completed" : "Mark complete"}
+                  </Button>
+
                   {previousChapter && (
                     <Link
                       href={`/learn/${course.id}/chapters/${previousChapter.id}`}

@@ -61,6 +61,7 @@ export function getNavForRoles(roles: string[]): NavItem[] {
 
 /** Post-login landing based on roles (extend as roles grow). */
 export function getDefaultAppPath(roles: string[]): string {
-  void roles;
-  return "/profile";
+  if (canManageCourses(roles)) return "/professor/myid";
+  if (roles.includes("admin")) return "/admin/categories";
+  return "/progress";
 }

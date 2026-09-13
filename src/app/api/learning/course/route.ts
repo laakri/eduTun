@@ -10,7 +10,7 @@ import { getBunnyHlsUrl } from "@/lib/bunny";
 
 export const GET = withErrorHandler(async (req) => {
   const user = await requireUser();
-  const courseId = z.string().cuid().parse(new URL(req.url).searchParams.get("courseId"));
+  const courseId = z.string().min(1).parse(new URL(req.url).searchParams.get("courseId"));
   const course = await db.course.findUnique({
     where: { id: courseId },
     include: {
@@ -20,6 +20,10 @@ export const GET = withErrorHandler(async (req) => {
         include: {
           sections: { orderBy: { order: "asc" } },
           resources: { orderBy: { order: "asc" } },
+          progress: {
+            where: { userId: user.id },
+            select: { watchedSeconds: true, completed: true },
+          },
         },
       },
     },
@@ -53,6 +57,7 @@ export const GET = withErrorHandler(async (req) => {
         title: resource.title,
         sizeBytes: resource.sizeBytes,
       })),
+      progress: chapter.progress[0] ?? { watchedSeconds: 0, completed: false },
     })),
   });
 });

@@ -183,6 +183,11 @@ export const GET = withErrorHandler(async () => {
   const totalTrackedChapters = progressEntries.length;
   const overallCompletion = totalTrackedChapters > 0 ? Math.round((completedChapters / totalTrackedChapters) * 100) : 0;
   const activityDays = [...new Set(progressEntries.map((entry) => entry.updatedAt.toISOString().slice(0, 10)))].sort().reverse();
+  const activityLevels = progressEntries.reduce<Record<string, number>>((levels, entry) => {
+    const date = entry.updatedAt.toISOString().slice(0, 10);
+    levels[date] = (levels[date] ?? 0) + 1;
+    return levels;
+  }, {});
   let streak = 0;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -209,6 +214,7 @@ export const GET = withErrorHandler(async () => {
       streak,
       activeDays: activityDays.length,
       activityDates: activityDays,
+      activityLevels,
       recentActivity: progressEntries.slice(0, 8).map((entry) => ({
         id: entry.id,
         courseId: entry.chapter.courseId,

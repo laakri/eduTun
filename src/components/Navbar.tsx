@@ -158,7 +158,7 @@ function AccountMenu({ isManager }: { isManager: boolean }) {
             </DropdownMenuItem>
           )}
 
-          <DropdownMenuItem render={<Link href={isManager ? "/professor/myid" : "/profile"} className="flex items-center gap-2" />}>
+          <DropdownMenuItem render={<Link href={isManager ? "/professor/myid" : "/progress"} className="flex items-center gap-2" />}>
             <UserRound className="h-4 w-4" />
             Profile
           </DropdownMenuItem>
@@ -306,7 +306,7 @@ export default function Navbar() {
                             </Button>
                           </Link>
                         )}
-                        <Link href={isManager ? "/professor/myid" : "/profile"}>
+                        <Link href={isManager ? "/professor/myid" : "/progress"}>
                           <Button variant="outline" className="h-11 w-full justify-start gap-2.5 text-[15px]">
                             <UserRound className="h-4 w-4" />
                             Profile

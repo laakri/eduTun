@@ -104,7 +104,7 @@ function AuthForm() {
 
     try {
       await signIn("google", {
-        callbackUrl: "/profile",
+        callbackUrl: "/auth-redirect",
       });
     } catch {
       setError("Unable to continue with Google.");

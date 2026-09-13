@@ -52,6 +52,8 @@ type ProgressData = {
   overallCompletion: number;
   streak: number;
   activeDays: number;
+  activityDates: string[];
+  activityLevels: Record<string, number>;
   nextUp: {
     courseId: string;
     courseTitle: string;
@@ -116,6 +118,7 @@ export default function ProgressPage() {
   }
 
   const unlockedMilestones = progress.milestones.filter((milestone) => milestone.unlocked).length;
+  const activityLevels = progress.activityLevels ?? {};
   const metrics: Array<{
     label: string;
     value: string | number;
@@ -157,6 +160,39 @@ export default function ProgressPage() {
               </div>
             );
           })}
+        </section>
+
+        <section className="mt-5 rounded-xl border border-border bg-card p-4 sm:p-5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-semibold">Learning activity</h2>
+              <p className="mt-1 text-xs text-muted-foreground">Your consistency over the last year</p>
+            </div>
+            <span className="text-xs text-muted-foreground">{progress.activeDays} active days</span>
+          </div>
+          <div className="mt-4 flex gap-1.5 overflow-hidden">
+            {Array.from({ length: 52 }, (_, week) => (
+              <div key={week} className="grid shrink-0 gap-1" style={{ gridTemplateRows: "repeat(7, 10px)" }}>
+                {Array.from({ length: 7 }, (_, day) => {
+                  const date = new Date();
+                  date.setDate(date.getDate() - ((51 - week) * 7 + (6 - day)));
+                    const dateKey = date.toISOString().slice(0, 10);
+                    const level = activityLevels[dateKey] ?? 0;
+                    const shade = level >= 3 ? "bg-primary" : level >= 2 ? "bg-primary/60" : level === 1 ? "bg-primary/30" : "bg-muted";
+                    return <span key={day} title={level ? `${level} learning ${level === 1 ? "activity" : "activities"}` : "No learning activity"} className={`size-2.5 rounded-[3px] ${shade}`} />;
+                })}
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>Less</span>
+            <span className="flex items-center gap-1">
+              <span className="size-2.5 rounded-[3px] bg-muted" />
+              <span className="size-2.5 rounded-[3px] bg-primary/40" />
+              <span className="size-2.5 rounded-[3px] bg-primary" />
+              More
+            </span>
+          </div>
         </section>
 
         {progress.nextUp && (
