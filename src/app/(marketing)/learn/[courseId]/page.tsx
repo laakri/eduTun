@@ -515,7 +515,7 @@ export default function LearnCoursePage() {
   }, [courseId, requestedChapter]);
 
   async function saveProgress(nextWatchedSeconds: number, nextCompleted = completed) {
-    if (!selectedId) return;
+    if (!selectedId || !course || course.canEdit) return;
     const response = await fetch("/api/learning/progress", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -531,6 +531,7 @@ export default function LearnCoursePage() {
   }
 
   function queueProgressSave(seconds: number) {
+    if (!course || course.canEdit) return;
     setWatchedSeconds(seconds);
     if (progressSaveTimer.current) clearTimeout(progressSaveTimer.current);
     progressSaveTimer.current = setTimeout(() => {
@@ -541,6 +542,7 @@ export default function LearnCoursePage() {
   }
 
   async function markChapterComplete() {
+    if (!course || course.canEdit) return;
     setCompleted(true);
     try {
       await saveProgress(watchedSeconds, true);
@@ -923,8 +925,12 @@ export default function LearnCoursePage() {
                     title: section.title,
                     start: section.startSeconds,
                   }))}
-                  onTimeUpdate={queueProgressSave}
-                  onEnded={() => void markChapterComplete()}
+                  {...(course && !course.canEdit
+                    ? {
+                        onTimeUpdate: queueProgressSave,
+                        onEnded: () => void markChapterComplete(),
+                      }
+                    : {})}
                 />
               </div>
             ) : (
@@ -957,14 +963,16 @@ export default function LearnCoursePage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={completed ? "secondary" : "outline"}
-                    onClick={() => void markChapterComplete()}
-                  >
-                    {completed ? "Completed" : "Mark complete"}
-                  </Button>
+                  {!course.canEdit && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={completed ? "secondary" : "outline"}
+                      onClick={() => void markChapterComplete()}
+                    >
+                      {completed ? "Completed" : "Mark complete"}
+                    </Button>
+                  )}
 
                   {previousChapter && (
                     <Link
