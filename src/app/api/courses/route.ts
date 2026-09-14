@@ -43,7 +43,7 @@ export const POST = withErrorHandler(async (req) => {
       categories: { create: categoryIds.map((categoryId) => ({ categoryId })) },
     },
     include: {
-      categories: { include: { category: true } },
+      categories: { include: { category: { select: { name: true, slug: true } } } },
       chapters: true,
     },
   });

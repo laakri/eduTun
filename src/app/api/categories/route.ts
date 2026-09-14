@@ -5,12 +5,9 @@ import { ok, withErrorHandler } from "@/lib/api-response";
 // This is the canonical read endpoint; /api/admin/categories now
 // only handles the admin-only write (POST).
 export const GET = withErrorHandler(async () => {
-  const categories = await db.category.findMany({
+  const bacRoot = await db.category.findUnique({
+    where: { slug: "bac" },
     include: {
-      parentLinks: {
-        orderBy: { order: "asc" },
-        include: { parent: { select: { id: true, name: true, slug: true } } },
-      },
       childLinks: {
         orderBy: { order: "asc" },
         include: { child: { select: { id: true, name: true, slug: true } } },
@@ -18,36 +15,23 @@ export const GET = withErrorHandler(async () => {
     },
   });
 
-  const parentMap = new Map<string, Array<{ id: string; name: string; slug: string; parentId: string }>>();
-  for (const category of categories) {
-    for (const link of category.childLinks) {
-      const child = {
-        id: link.child.id,
-        name: link.child.name,
-        slug: link.child.slug,
-        parentId: category.id,
-      };
-      const bucket = parentMap.get(category.id) ?? [];
-      bucket.push(child);
-      parentMap.set(category.id, bucket);
-    }
+  if (!bacRoot) {
+    return ok([]);
   }
 
-  const tree = categories
-    .filter((category) => category.parentLinks.length === 0)
-    .map((category) => ({
-      id: category.id,
-      name: category.name,
-      slug: category.slug,
-      parentId: null,
-      children: (parentMap.get(category.id) ?? []).map((child) => ({
-        id: child.id,
-        name: child.name,
-        slug: child.slug,
-        parentId: child.parentId,
-        children: [],
-      })),
-    }));
+  const tree = [{
+    id: bacRoot.id,
+    name: bacRoot.name,
+    slug: bacRoot.slug,
+    parentId: null,
+    children: bacRoot.childLinks.map((link) => ({
+      id: link.child.id,
+      name: link.child.name,
+      slug: link.child.slug,
+      parentId: bacRoot.id,
+      children: [],
+    })),
+  }];
 
   return ok(tree);
 });

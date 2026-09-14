@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Search,
@@ -14,21 +14,7 @@ import {
   BookOpen,
   CircleCheck,
   Loader2,
-  FileText,
-  HelpCircle,
 } from "lucide-react";
-
-type VideoStatus = "UPLOADING" | "PROCESSING" | "READY" | "FAILED";
-
-type ChapterVM = {
-  id: string;
-  title: string;
-  order: number;
-  durationSeconds: number | null;
-  videoStatus: VideoStatus;
-  hasQuiz: boolean;
-  resourceCount: number;
-};
 
 type CourseVM = {
   id: string;
@@ -41,7 +27,9 @@ type CourseVM = {
     name: string;
     role: string;
   };
-  chapters: ChapterVM[];
+  chapterCount: number;
+  totalDurationSeconds: number;
+  readyChapterCount: number;
 };
 
 const coverTones = [
@@ -72,17 +60,7 @@ function formatDuration(totalSeconds: number): string {
 }
 
 function courseDuration(course: CourseVM): number {
-  return course.chapters.reduce(
-    (sum: number, chapter: ChapterVM) =>
-      sum + (chapter.durationSeconds ?? 0),
-    0,
-  );
-}
-
-function readyCount(course: CourseVM): number {
-  return course.chapters.filter(
-    (chapter: ChapterVM) => chapter.videoStatus === "READY",
-  ).length;
+  return course.totalDurationSeconds;
 }
 
 function coverTone(course: CourseVM): string {
@@ -126,6 +104,7 @@ function CourseCover({
 }
 
 export default function BrowseCoursesPage() {
+  const router = useRouter();
   const [courses, setCourses] = useState<CourseVM[]>([]);
   const [hasActivePack, setHasActivePack] = useState<boolean>(false);
   const [needsCategorySelection, setNeedsCategorySelection] = useState(false);
@@ -137,13 +116,8 @@ export default function BrowseCoursesPage() {
   const [query, setQuery] = useState<string>("");
   const [activeCategory, setActiveCategory] = useState<string>("Toutes");
   const [activeProfessor, setActiveProfessor] = useState<string>("Tous les profs");
-  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(
-    null,
-  );
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-
-  const panelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -251,7 +225,7 @@ export default function BrowseCoursesPage() {
           course.title.toLowerCase().includes(normalizedQuery) ||
           course.prof.name.toLowerCase().includes(normalizedQuery) ||
           course.tags.some((tag) => tag.toLowerCase().includes(normalizedQuery)) ||
-          course.chapters.some((chapter) => chapter.title.toLowerCase().includes(normalizedQuery)),
+          course.categories.some((category) => category.toLowerCase().includes(normalizedQuery)),
       )
       .slice(0, 5)
       .map((course: CourseVM) => ({
@@ -274,7 +248,7 @@ export default function BrowseCoursesPage() {
         course.title.toLowerCase().includes(normalizedQuery) ||
         course.prof.name.toLowerCase().includes(normalizedQuery) ||
         course.tags.some((tag) => tag.toLowerCase().includes(normalizedQuery)) ||
-        course.chapters.some((chapter) => chapter.title.toLowerCase().includes(normalizedQuery));
+        course.categories.some((category) => category.toLowerCase().includes(normalizedQuery));
 
       const matchesProfessor =
         activeProfessor === "Tous les profs" ||
@@ -284,20 +258,9 @@ export default function BrowseCoursesPage() {
     });
   }, [activeCategory, activeProfessor, courses, query]);
 
-  const selectedCourse =
-    courses.find((course: CourseVM) => course.id === selectedCourseId) ??
-    null;
-
   const featuredCourse = courses[0] ?? null;
   function openCourse(id: string): void {
-    setSelectedCourseId(id);
-
-    requestAnimationFrame(() => {
-      panelRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    });
+    router.push(`/learn/${id}`);
   }
 
   if (loading) {
@@ -458,7 +421,7 @@ export default function BrowseCoursesPage() {
                 <BookOpen className="h-4 w-4" />
                 {courses.reduce(
                   (sum: number, course: CourseVM) =>
-                    sum + course.chapters.length,
+                    sum + course.chapterCount,
                   0,
                 )}{" "}
                 chapters
@@ -585,19 +548,10 @@ export default function BrowseCoursesPage() {
         ) : (
           <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {filteredCourses.map((course: CourseVM) => {
-              const ready = readyCount(course);
-              const total = course.chapters.length;
-
               return (
-                <button
+                <div
                   key={course.id}
-                  type="button"
-                  onClick={() => openCourse(course.id)}
-                  className={`group flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-muted/20 text-left transition-colors duration-200 hover:bg-muted/50 ${
-                    selectedCourseId === course.id
-                      ? "bg-muted/60 ring-1 ring-primary/40"
-                      : ""
-                  }`}
+                  className="group flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-muted/20 text-left transition-colors duration-200 hover:bg-muted/50"
                 >
                   <CourseCover
                     course={course}
@@ -638,192 +592,32 @@ export default function BrowseCoursesPage() {
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span className="flex items-center gap-1.5">
                         <BookOpen className="h-3.5 w-3.5" />
-                        {total} chapter{total > 1 ? "s" : ""}
+                        {course.chapterCount} chapter{course.chapterCount > 1 ? "s" : ""}
                       </span>
 
                       <span className="flex items-center gap-1.5">
                         <Clock className="h-3.5 w-3.5" />
-                        {formatDuration(courseDuration(course))}
+                        {formatDuration(course.totalDurationSeconds)}
                       </span>
                     </div>
 
-                    {ready < total && (
+                    {course.readyChapterCount < course.chapterCount && (
                       <p className="mt-2 text-xs text-muted-foreground">
-                        {ready}/{total} chapters ready
+                        {course.readyChapterCount}/{course.chapterCount} chapters ready
                       </p>
                     )}
 
-                    <div className="mt-5 flex items-center text-sm font-medium text-primary">
-                      View chapters
+                    <Link
+                      href={`/learn/${course.id}`}
+                      className="mt-5 flex items-center text-sm font-medium text-primary"
+                    >
+                      View course
                       <ArrowRight className="ml-1.5 h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-1" />
-                    </div>
+                    </Link>
                   </div>
-                </button>
+                </div>
               );
             })}
-          </div>
-        )}
-      </section>
-
-      {/* Selected course */}
-      <section
-        ref={panelRef}
-        className="mx-auto max-w-6xl scroll-mt-8 px-6 pb-24"
-      >
-        {!selectedCourse ? (
-          <div className="rounded-lg bg-muted/30 p-10 text-center">
-            <BookOpen className="mx-auto h-5 w-5 text-muted-foreground" />
-
-            <p className="mt-3 text-sm text-muted-foreground">
-              Choose a course above to see its chapters.
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-lg border border-border bg-muted/20">
-            {/* Course header */}
-            <div className="bg-muted/40 p-6 sm:p-8">
-              <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-                <div className="max-w-2xl">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="secondary">
-                      {selectedCourse.categories[0] ?? "Course"}
-                    </Badge>
-
-                    {selectedCourse.tags.map((tag: string) => (
-                      <Badge key={tag} variant="outline">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-
-                  <h3 className="mt-3 text-2xl font-semibold tracking-tight">
-                    {selectedCourse.title}
-                  </h3>
-
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    {selectedCourse.description}
-                  </p>
-
-                  <div className="mt-5 flex items-center gap-3">
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback className="bg-background text-xs">
-                        {initials(selectedCourse.prof.name)}
-                      </AvatarFallback>
-                    </Avatar>
-
-                    <div>
-                      <p className="text-sm font-medium">
-                        {selectedCourse.prof.name}
-                      </p>
-
-                      <p className="text-xs text-muted-foreground">
-                        {selectedCourse.prof.role}
-                      </p>
-                    </div>
-                  </div>
-
-                </div>
-
-                <Button
-                  asChild
-                  className="shrink-0"
-                  disabled={readyCount(selectedCourse) === 0}
-                >
-                  <Link href={`/learn/${selectedCourse.id}`}>
-                    {readyCount(selectedCourse) === 0
-                      ? "Not ready yet"
-                      : "Start course"}
-
-                    {readyCount(selectedCourse) > 0 && (
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    )}
-                  </Link>
-                </Button>
-              </div>
-            </div>
-
-            {/* Chapters */}
-            <div className="p-6 sm:p-8">
-              <div className="flex items-center justify-between gap-4">
-                <p className="text-sm font-medium">Course chapters</p>
-
-                <p className="text-xs text-muted-foreground">
-                  {selectedCourse.chapters.length} chapter
-                  {selectedCourse.chapters.length > 1 ? "s" : ""} ·{" "}
-                  {formatDuration(courseDuration(selectedCourse))}
-                </p>
-              </div>
-
-              <ol className="mt-4 space-y-2">
-                {selectedCourse.chapters.map((chapter: ChapterVM) => {
-                  const isReady = chapter.videoStatus === "READY";
-
-                  return (
-                    <li
-                      key={chapter.id}
-                      className="flex items-center gap-4 rounded-md border border-border bg-muted/30 p-3.5 transition-colors hover:bg-muted/60"
-                    >
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                        {chapter.order}
-                      </span>
-
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">
-                          {chapter.title}
-                        </p>
-
-                        <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3.5 w-3.5" />
-
-                            {chapter.durationSeconds
-                              ? formatDuration(chapter.durationSeconds)
-                              : "Duration pending"}
-                          </span>
-
-                          {chapter.hasQuiz && (
-                            <span className="flex items-center gap-1">
-                              <HelpCircle className="h-3.5 w-3.5" />
-                              Quiz
-                            </span>
-                          )}
-
-                          {chapter.resourceCount > 0 && (
-                            <span className="flex items-center gap-1">
-                              <FileText className="h-3.5 w-3.5" />
-
-                              {chapter.resourceCount} resource
-                              {chapter.resourceCount > 1 ? "s" : ""}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {isReady ? (
-                        <Button
-                          asChild
-                          variant="ghost"
-                          size="sm"
-                          className="shrink-0"
-                        >
-                          <Link
-                            href={`/learn/${selectedCourse.id}/chapters/${chapter.id}`}
-                          >
-                            Start
-                            <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                          </Link>
-                        </Button>
-                      ) : (
-                        <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          Processing
-                        </span>
-                      )}
-                    </li>
-                  );
-                })}
-              </ol>
-            </div>
           </div>
         )}
       </section>

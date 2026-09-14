@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 
 import {
@@ -34,15 +35,13 @@ type CourseListItem = {
   coverImageUrl: string | null;
   canEdit: boolean;
   chapters: unknown[];
-  categories: Array<{ category: { name: string } }>;
+  categories: Array<{ category: { name: string; slug: string } }>;
   updatedAt?: string;
   studentsCount?: number;
 };
 
 type SortKey = "newest" | "title" | "chapters";
 type StatusFilter = "all" | "published" | "draft";
-
-const SORT_OPTIONS: SortKey[] = ["newest", "title", "chapters"];
 
 function initials(title: string) {
   const words = title.trim().split(/\s+/);
@@ -58,6 +57,7 @@ function initials(title: string) {
 
 export default function CoursesPage() {
   const { data: session } = useSession();
+  const searchParams = useSearchParams();
   const manager = canManageCourses(session?.user?.roles ?? []);
 
   const [courses, setCourses] = useState<CourseListItem[]>([]);
@@ -68,6 +68,7 @@ export default function CoursesPage() {
   const [sortKey, setSortKey] = useState<SortKey>("newest");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [showOnlyMine, setShowOnlyMine] = useState(false);
+  const selectedCategory = searchParams.get("category") ?? "";
 
   useEffect(() => {
     let cancelled = false;
@@ -101,6 +102,17 @@ export default function CoursesPage() {
 
     if (showOnlyMine) list = list.filter((c) => c.canEdit);
 
+    if (selectedCategory) {
+      const normalizedCategory = selectedCategory.toLocaleLowerCase();
+      list = list.filter((course) =>
+        course.categories.some(
+          ({ category }) =>
+            category.name.toLocaleLowerCase() === normalizedCategory ||
+            category.slug.toLocaleLowerCase() === normalizedCategory,
+        ),
+      );
+    }
+
     if (statusFilter !== "all") {
       list = list.filter((c) =>
         statusFilter === "published" ? c.published : !c.published,
@@ -132,7 +144,7 @@ export default function CoursesPage() {
     }
 
     return list;
-  }, [courses, query, sortKey, statusFilter, showOnlyMine]);
+  }, [courses, query, selectedCategory, sortKey, statusFilter, showOnlyMine]);
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground">

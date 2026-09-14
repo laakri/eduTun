@@ -238,8 +238,13 @@ export default function ProgressPage() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <h3 className="font-medium">{course.courseTitle}</h3>
+                        <div className="min-w-0">
+                          <Link
+                            href={`/learn/${course.courseId}`}
+                            className="font-medium hover:text-primary"
+                          >
+                            {course.courseTitle}
+                          </Link>
                           <p className="mt-1 text-xs text-muted-foreground">{course.completedChapters} of {course.totalChapters} chapters complete</p>
                         </div>
                         <span className="text-sm font-semibold">{course.percent}%</span>
@@ -249,8 +254,9 @@ export default function ProgressPage() {
                       </div>
                       <div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
                         <span>{course.nextChapter ? `Next: ${course.nextChapter}` : "Course complete"}</span>
-                        <Link className="font-medium text-foreground hover:text-primary" href={course.nextChapterId ? `/learn/${course.courseId}?chapter=${course.nextChapterId}` : `/learn/${course.courseId}`}>
+                        <Link className="font-medium text-primary hover:text-primary/80" href={course.nextChapterId ? `/learn/${course.courseId}?chapter=${course.nextChapterId}` : `/learn/${course.courseId}`}>
                           {course.nextChapter ? "Resume" : "Review"}
+                          <ArrowRight className="ml-1 inline size-3.5" />
                         </Link>
                       </div>
                     </div>

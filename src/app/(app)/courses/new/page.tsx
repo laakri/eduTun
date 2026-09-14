@@ -145,15 +145,14 @@ export default function NewCoursePage() {
   const selectedParentCategory = categories.find(
     (category) => category.id === parentCategoryId,
   );
-  const subjectCategories = selectedParentCategory
-    ? selectedParentCategory.children?.length
-      ? selectedParentCategory.children
-      : [selectedParentCategory]
+  const subjectCategories = selectedParentCategory?.children?.length
+    ? selectedParentCategory.children
     : [];
 
   function handleParentCategoryChange(value: string) {
     setParentCategoryId(value);
     setCategoryId("");
+    setSelectedCategoryIds([]);
   }
 
   function handleSubjectChange(value: string) {
@@ -198,7 +197,7 @@ export default function NewCoursePage() {
     }
 
     if (!parentCategoryId || selectedCategoryIds.length === 0) {
-      setError("Choose a program and at least one specific subject before continuing.");
+      setError("Choose at least one specific subject before continuing.");
       return;
     }
 

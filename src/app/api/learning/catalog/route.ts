@@ -34,10 +34,11 @@ export const GET = withErrorHandler(async () => {
         categories: { include: { category: true } },
         tags: { include: { tag: true } },
         chapters: {
-          orderBy: { order: "asc" },
-          include: {
-            quiz: { select: { id: true } },
-            _count: { select: { resources: true } },
+          select: {
+            id: true,
+            title: true,
+            durationSeconds: true,
+            videoStatus: true,
           },
         },
       },
@@ -126,11 +127,11 @@ export const GET = withErrorHandler(async () => {
     return false;
   };
 
-  const accessibleCourses = courses
-    .filter((course) =>
-      course.categories.some(({ categoryId }) => canAccessCategory(categoryId)),
-    )
-    .map((course) => ({
+  const accessibleCourseRecords = courses.filter((course) =>
+    course.categories.some(({ categoryId }) => canAccessCategory(categoryId)),
+  );
+
+  const accessibleCourses = accessibleCourseRecords.map((course) => ({
       id: course.id,
       title: course.title,
       description: course.description ?? "",
@@ -142,18 +143,17 @@ export const GET = withErrorHandler(async () => {
         name: course.prof.fullName,
         role: "Course instructor",
       },
-      chapters: course.chapters.map((chapter) => ({
-        id: chapter.id,
-        title: chapter.title,
-        order: chapter.order,
-        durationSeconds: chapter.durationSeconds,
-        videoStatus: chapter.videoStatus,
-        hasQuiz: Boolean(chapter.quiz),
-        resourceCount: chapter._count.resources,
-      })),
-    }));
+      chapterCount: course.chapters.length,
+      totalDurationSeconds: course.chapters.reduce(
+        (total, chapter) => total + (chapter.durationSeconds ?? 0),
+        0,
+      ),
+      readyChapterCount: course.chapters.filter(
+        (chapter) => chapter.videoStatus === "READY",
+      ).length,
+  }));
 
-  const courseProgress = accessibleCourses.map((course) => {
+  const courseProgress = accessibleCourseRecords.map((course) => {
     const entries = progressEntries.filter((entry) => entry.chapter.courseId === course.id);
     const totalChapters = course.chapters.length;
     const completedChapters = entries.filter((entry) => entry.completed).length;

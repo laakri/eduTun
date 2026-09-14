@@ -11,70 +11,25 @@ import { Input } from "@/components/ui/input";
 // Content
 // ---------------------------------------------------------------------------
 
-const quickLinks = [
-  { label: "Sciences", href: "/courses?category=Sciences" },
-  { label: "Langues", href: "/courses?category=Langues" },
-  {
-    label: "Sciences humaines",
-    href: "/courses?category=Sciences+humaines",
-  },
-  {
-    label: "Vie professionnelle",
-    href: "/courses?category=Professionnel",
-  },
-];
-
-const bacTracks = [
-  {
-    id: "bac-math",
-    title: "Bac Mathématiques",
-    short: "Math",
-    description: "Maths · Physique · Informatique",
-    courses: 34,
-    students: 1280,
-  },
-  {
-    id: "bac-sciences",
-    title: "Bac Sciences expérimentales",
-    short: "Sciences",
-    description: "SVT · Physique · Chimie",
-    courses: 42,
-    students: 1640,
-  },
-  {
-    id: "bac-info",
-    title: "Bac Sciences de l'informatique",
-    short: "Info",
-    description: "Programmation · Algo · Systèmes",
-    courses: 29,
-    students: 970,
-  },
-  {
-    id: "bac-technique",
-    title: "Bac Technique",
-    short: "Technique",
-    description: "Technique · Maths · Physique",
-    courses: 26,
-    students: 820,
-  },
-  {
-    id: "bac-economie",
-    title: "Bac Économie & Gestion",
-    short: "Économie",
-    description: "Économie · Gestion · Maths",
-    courses: 31,
-    students: 1130,
-  },
-  {
-    id: "bac-lettres",
-    title: "Bac Lettres",
-    short: "Lettres",
-    description: "Français · Philosophie · Arabe",
-    courses: 24,
-    students: 760,
-  },
-  
+const bacSubjects = [
+  { slug: "subject-mathematiques", name: "Mathématiques" },
+  { slug: "subject-physique", name: "Physique" },
+  { slug: "subject-chimie", name: "Chimie" },
+  { slug: "subject-sciences-vie-terre", name: "Sciences de la vie et de la Terre" },
+  { slug: "subject-informatique", name: "Informatique" },
+  { slug: "subject-algorithmique", name: "Algorithmique" },
+  { slug: "subject-francais", name: "Français" },
+  { slug: "subject-anglais", name: "Anglais" },
+  { slug: "subject-arabe", name: "Arabe" },
+  { slug: "subject-histoire", name: "Histoire" },
+  { slug: "subject-geographie", name: "Géographie" },
+  { slug: "subject-philosophie", name: "Philosophie" },
 ] as const;
+
+const quickLinks = bacSubjects.slice(0, 4).map((subject) => ({
+  label: subject.name,
+  href: `/courses?category=${encodeURIComponent(subject.name)}`,
+}));
 
 // ---------------------------------------------------------------------------
 // Page
@@ -95,7 +50,6 @@ export default function HomePage() {
     const query = professorQuery.trim();
 
     if (query.length < 2) {
-      setProfessors([]);
       return;
     }
 
@@ -239,12 +193,10 @@ export default function HomePage() {
           </div>
 
           <div className="mt-8 grid grid-cols-1 divide-y divide-border border-y border-border sm:grid-cols-2 sm:divide-x lg:grid-cols-3">
-            {bacTracks.map((track, index) => (
+            {bacSubjects.map((subject, index) => (
               <Link
-                key={track.id}
-                href={`/courses?level=bac&track=${encodeURIComponent(
-                  track.short,
-                )}`}
+                key={subject.slug}
+                href={`/courses?category=${encodeURIComponent(subject.name)}`}
                 className="group relative flex min-h-[180px] flex-col px-1 py-6 transition-colors hover:bg-muted/40 sm:px-6"
               >
                 <div className="flex items-center justify-between">
@@ -257,31 +209,20 @@ export default function HomePage() {
 
                 <div className="mt-5">
                   <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    {track.short}
+                    Bac
                   </p>
 
                   <h3 className="mt-1.5 text-[15px] font-medium leading-snug">
-                    {track.title}
+                    {subject.name}
                   </h3>
 
                   <p className="mt-1.5 text-xs text-muted-foreground">
-                    {track.description}
+                    Matière du programme tunisien
                   </p>
                 </div>
 
-                <div className="mt-auto flex items-end justify-between border-t border-border/70 pt-3 text-xs">
-                  <div>
-                    <span className="font-medium text-foreground">
-                      {track.courses}
-                    </span>{" "}
-                    <span className="text-muted-foreground">
-                      cours
-                    </span>
-                  </div>
-
-                  <span className="text-muted-foreground">
-                    {track.students.toLocaleString("fr-FR")} apprenants
-                  </span>
+                <div className="mt-auto border-t border-border/70 pt-3 text-xs text-muted-foreground">
+                  Voir les cours
                 </div>
               </Link>
             ))}

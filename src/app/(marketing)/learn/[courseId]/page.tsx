@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -845,6 +846,9 @@ export default function LearnCoursePage() {
     selectedIndex < course.chapters.length - 1
       ? course.chapters[selectedIndex + 1]
       : null;
+  const completedChapterCount = course.chapters.filter(
+    (item) => item.progress.completed,
+  ).length;
 
   return (
     <main className="min-h-[calc(100svh-56px)]">
@@ -976,7 +980,7 @@ export default function LearnCoursePage() {
 
                   {previousChapter && (
                     <Link
-                      href={`/learn/${course.id}/chapters/${previousChapter.id}`}
+                      href={`/learn/${course.id}?chapter=${previousChapter.id}`}
                       onClick={() => setSelectedId(previousChapter.id)}
                       className="inline-flex h-9 items-center gap-1.5 px-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
                     >
@@ -987,7 +991,7 @@ export default function LearnCoursePage() {
 
                   {nextChapter && (
                     <Link
-                      href={`/learn/${course.id}/chapters/${nextChapter.id}`}
+                      href={`/learn/${course.id}?chapter=${nextChapter.id}`}
                       onClick={() => setSelectedId(nextChapter.id)}
                       className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
                     >
@@ -1326,7 +1330,8 @@ export default function LearnCoursePage() {
 
           {/* Playlist */}
           <aside className="min-w-0 lg:sticky lg:top-14 lg:self-start lg:pt-14">
-            <div className="flex items-end justify-between">
+            <div className="rounded-xl border border-border bg-card p-4">
+            <div className="flex items-end justify-between gap-4">
               <div>
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   Course
@@ -1338,9 +1343,22 @@ export default function LearnCoursePage() {
               </div>
 
               <span className="text-xs text-muted-foreground">
-                {course.chapters.length}
+                {completedChapterCount}/{course.chapters.length}
               </span>
             </div>
+
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary transition-all"
+                style={{
+                  width: `${course.chapters.length > 0 ? (completedChapterCount / course.chapters.length) * 100 : 0}%`,
+                }}
+              />
+            </div>
+
+            <p className="mt-2 text-xs text-muted-foreground">
+              {completedChapterCount} of {course.chapters.length} chapters complete
+            </p>
 
             <nav className="mt-4 max-h-[calc(100svh-11rem)] overflow-y-auto pr-2">
               {course.chapters.map((item: Chapter, index: number) => {
@@ -1349,7 +1367,7 @@ export default function LearnCoursePage() {
                 return (
                   <Link
                     key={item.id}
-                    href={`/learn/${course.id}/chapters/${item.id}`}
+                    href={`/learn/${course.id}?chapter=${item.id}`}
                     onClick={() => setSelectedId(item.id)}
                     className={[
                       "group relative flex items-center gap-3 py-3 transition-colors",
@@ -1367,7 +1385,9 @@ export default function LearnCoursePage() {
                           : "bg-muted text-muted-foreground group-hover:bg-muted/80",
                       ].join(" ")}
                     >
-                      {active ? (
+                      {item.progress.completed ? (
+                        <CheckCircle2 className="size-3.5" />
+                      ) : active ? (
                         <Play className="size-3 fill-current" />
                       ) : (
                         index + 1
@@ -1412,6 +1432,7 @@ export default function LearnCoursePage() {
                 No chapters available.
               </p>
             )}
+            </div>
           </aside>
         </div>
       </div>
