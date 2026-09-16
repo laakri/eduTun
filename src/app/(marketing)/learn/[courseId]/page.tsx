@@ -813,11 +813,11 @@ export default function LearnCoursePage() {
     return (
       <main className="mx-auto max-w-3xl px-5 py-14 sm:px-6">
         <Link
-          href="/packs"
+          href="/learn"
           className="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="size-4" />
-          My packs
+          Back to learning
         </Link>
 
         <h1 className="mt-8 text-2xl font-semibold tracking-tight">
@@ -852,14 +852,14 @@ export default function LearnCoursePage() {
 
   return (
     <main className="min-h-[calc(100svh-56px)]">
-      <div className="mx-auto max-w-[1440px] px-5 py-6 sm:px-8 lg:px-10">
+      <div className="mx-auto w-full max-w-7xl px-5 py-6 sm:px-8 lg:px-10">
         {/* Top navigation */}
         <div className="flex items-center gap-2 text-sm">
           <Link
-            href="/packs"
+            href="/learn"
             className="text-muted-foreground transition-colors hover:text-foreground"
           >
-            My packs
+            Back to learning
           </Link>
 
           <ChevronRight className="size-3.5 text-muted-foreground/40" />
