@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getDefaultAppPath } from "@/lib/nav";
 
-type Mode = "login" | "signup";
+type Mode = "login" | "signup" | "forgot" | "reset";
 
 function GoogleIcon() {
   return (
@@ -51,10 +51,16 @@ function AuthForm() {
   const searchParams = useSearchParams();
 
   const mode = useMemo<Mode>(() => {
-    return searchParams.get("mode") === "signup" ? "signup" : "login";
+    const requestedMode = searchParams.get("mode");
+    return requestedMode === "signup" || requestedMode === "forgot" || requestedMode === "reset"
+      ? requestedMode
+      : "login";
   }, [searchParams]);
 
   const isSignup = mode === "signup";
+  const resetToken = searchParams.get("token") ?? "";
+  const verifiedStatus = searchParams.get("verified");
+  const resetStatus = searchParams.get("reset");
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -66,6 +72,17 @@ function AuthForm() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [devVerificationUrl, setDevVerificationUrl] = useState("");
+  const [showResendVerification, setShowResendVerification] = useState(false);
+  const statusError = verifiedStatus === "invalid"
+    ? "That confirmation link is invalid or expired."
+    : "";
+  const statusSuccess = verifiedStatus === "verified"
+    ? "Email confirmed. You can sign in now."
+    : resetStatus === "success"
+      ? "Password updated. You can sign in with your new password."
+      : "";
 
   function setMode(nextMode: Mode) {
     if (nextMode === mode || isSubmitting) {
@@ -73,6 +90,7 @@ function AuthForm() {
     }
 
     setError("");
+    setSuccess("");
 
     router.replace(
       nextMode === "signup"
@@ -123,6 +141,7 @@ function AuthForm() {
     });
 
     if (!result || result.error) {
+      setShowResendVerification(true);
       throw new Error("Invalid email or password.");
     }
 
@@ -157,20 +176,103 @@ function AuthForm() {
     const data = await response.json().catch(() => null);
 
     if (!response.ok) {
-      throw new Error(data?.error || "Unable to create your account.");
+      throw new Error(data?.error?.message || "Unable to create your account.");
     }
 
-    const result = await signIn("credentials", {
-      email: email.trim(),
-      password,
-      redirect: false,
-    });
+    setSuccess(
+      data?.data?.resentVerification
+        ? "This account is not confirmed yet. We sent a fresh confirmation link."
+        : "Account created. Confirm your email before signing in.",
+    );
+    setDevVerificationUrl(data?.data?.devVerificationUrl ?? "");
+    setShowResendVerification(false);
+    setIsSubmitting(false);
+  }
 
-    if (!result || result.error) {
-      throw new Error("Your account was created, but sign in failed.");
+  async function handleResendVerification() {
+    if (isSubmitting || !email.trim()) return;
+
+    setError("");
+    setSuccess("");
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error?.message ?? "Unable to resend confirmation email.");
+      }
+
+      setSuccess(data.data.message);
+      setDevVerificationUrl(data.data.devVerificationUrl ?? "");
+      setShowResendVerification(false);
+    } catch (reason: unknown) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Unable to resend confirmation email.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleForgotPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isSubmitting) return;
+
+    setError("");
+    setSuccess("");
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error?.message ?? "Unable to send reset email.");
+      }
+      setSuccess(data.data.message);
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "Unable to send reset email.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleResetPassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isSubmitting) return;
+    if (password.length < 8 || password !== confirmPassword) {
+      setError(password.length < 8 ? "Password must be at least 8 characters." : "Passwords do not match.");
+      return;
     }
 
-    await afterSuccessfulAuth();
+    setError("");
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: resetToken, password }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error?.message ?? "Unable to reset password.");
+      }
+      router.replace("/register?mode=login&reset=success");
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "Unable to reset password.");
+      setIsSubmitting(false);
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -181,6 +283,7 @@ function AuthForm() {
     }
 
     setError("");
+    setSuccess("");
     setIsSubmitting(true);
 
     try {
@@ -198,6 +301,77 @@ function AuthForm() {
 
       setIsSubmitting(false);
     }
+  }
+
+  if (mode === "forgot") {
+    return (
+      <main className="min-h-screen bg-background px-6 py-16 text-foreground">
+        <div className="mx-auto max-w-md">
+          <h1 className="text-3xl font-semibold tracking-tight">Reset your password</h1>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
+            Enter your email and we will send a reset link if an account exists.
+          </p>
+          <form onSubmit={handleForgotPassword} className="mt-8 space-y-4">
+            <Input
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="Email address"
+              autoComplete="email"
+              required
+              disabled={isSubmitting}
+              className="h-12"
+            />
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            {success && <p className="text-sm text-emerald-600">{success}</p>}
+            <Button className="h-12 w-full" disabled={isSubmitting}>
+              {isSubmitting ? "Sending..." : "Send reset link"}
+            </Button>
+          </form>
+          <Link href="/register?mode=login" className="mt-6 block text-center text-sm text-muted-foreground hover:text-foreground">
+            Back to sign in
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  if (mode === "reset") {
+    return (
+      <main className="min-h-screen bg-background px-6 py-16 text-foreground">
+        <div className="mx-auto max-w-md">
+          <h1 className="text-3xl font-semibold tracking-tight">Choose a new password</h1>
+          <form onSubmit={handleResetPassword} className="mt-8 space-y-4">
+            <Input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="New password"
+              autoComplete="new-password"
+              required
+              minLength={8}
+              disabled={isSubmitting}
+              className="h-12"
+            />
+            <Input
+              type="password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              placeholder="Confirm new password"
+              autoComplete="new-password"
+              required
+              minLength={8}
+              disabled={isSubmitting}
+              className="h-12"
+            />
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button className="h-12 w-full" disabled={isSubmitting}>
+              {isSubmitting ? "Updating..." : "Update password"}
+            </Button>
+          </form>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -461,9 +635,32 @@ function AuthForm() {
                   </div>
 
                   {/* Error */}
-                  {error && (
+                  {(error || statusError) && (
                     <div className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-                      {error}
+                      {error || statusError}
+                      {showResendVerification && !isSignup && (
+                        <button
+                          type="button"
+                          onClick={() => void handleResendVerification()}
+                          className="mt-2 block font-medium underline underline-offset-2"
+                        >
+                          Resend confirmation email
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {(success || statusSuccess) && (
+                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-700">
+                      {success || statusSuccess}
+                      {devVerificationUrl && (
+                        <a
+                          href={devVerificationUrl}
+                          className="mt-2 block font-medium underline underline-offset-2"
+                        >
+                          Confirm email locally
+                        </a>
+                      )}
                     </div>
                   )}
                 </div>
@@ -489,6 +686,15 @@ function AuthForm() {
                       <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
                     )}
                   </Button>
+
+                  {!isSignup && (
+                    <Link
+                      href="/register?mode=forgot"
+                      className="mt-4 block text-center text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    >
+                      Forgot your password?
+                    </Link>
+                  )}
 
                   <p className="mt-6 text-center text-xs leading-5 text-muted-foreground">
                     By continuing, you agree to our{" "}

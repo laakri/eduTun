@@ -18,7 +18,7 @@ import {
   Megaphone,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 
@@ -77,11 +77,31 @@ const ANNOUNCEMENT = {
 
 function AnnouncementBar() {
   const [dismissed, setDismissed] = useState(false);
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    let previousScrollY = window.scrollY;
+
+    function handleScroll() {
+      const currentScrollY = window.scrollY;
+      const scrollingUp = currentScrollY < previousScrollY;
+
+      setVisible(currentScrollY <= 8 || scrollingUp);
+      previousScrollY = currentScrollY;
+    }
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   if (dismissed || !ANNOUNCEMENT) return null;
 
   return (
-    <div className="relative w-full bg-neutral-900 text-neutral-100 dark:bg-black">
+    <div
+      className={`grid w-full overflow-hidden bg-neutral-900 text-neutral-100 transition-[grid-template-rows] duration-300 dark:bg-black ${visible ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
+    >
+      <div className="min-h-0">
+        <div className={`relative transition-transform duration-300 ${visible ? "translate-y-0" : "-translate-y-full"}`}>
       <div className="mx-auto flex h-9 max-w-7xl items-center justify-center gap-2 px-4 text-xs sm:text-[13px]">
         <Megaphone className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
         <span className="truncate">
@@ -104,6 +124,8 @@ function AnnouncementBar() {
         >
           <X className="h-3.5 w-3.5" />
         </button>
+      </div>
+        </div>
       </div>
     </div>
   );

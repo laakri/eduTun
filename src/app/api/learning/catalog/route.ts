@@ -24,26 +24,12 @@ function collectDescendantCategoryIds(
   return ids;
 }
 
-export const GET = withErrorHandler(async () => {
+export const GET = withErrorHandler(async (req) => {
   const user = await requireUser();
-  const [courses, activeSubscriptions, categories, categoryRows, progressEntries] = await Promise.all([
-    db.course.findMany({
-      where: { published: true },
-      include: {
-        prof: { select: { id: true, fullName: true } },
-        categories: { include: { category: true } },
-        tags: { include: { tag: true } },
-        chapters: {
-          select: {
-            id: true,
-            title: true,
-            durationSeconds: true,
-            videoStatus: true,
-          },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    }),
+  const searchParams = new URL(req.url).searchParams;
+  const categoryId = searchParams.get("categoryId")?.trim() || null;
+  const query = searchParams.get("q")?.trim() || "";
+  const [activeSubscriptions, categories, categoryRows, progressEntries] = await Promise.all([
     db.userSubscription.findMany({
       where: {
         userId: user.id,
@@ -112,6 +98,14 @@ export const GET = withErrorHandler(async () => {
     return categoryRows.filter((category) => ids.has(category.id));
   });
 
+  const grantedFilterCategories = categoryRows.filter((category) =>
+    grantedCategoryIds.has(category.id),
+  );
+  const filterCategories = [
+    ...availableCategories,
+    ...grantedFilterCategories,
+  ];
+
   const canAccessCategory = (categoryId: string) => {
     const stack: string[] = [categoryId];
     const visited = new Set<string>();
@@ -127,11 +121,57 @@ export const GET = withErrorHandler(async () => {
     return false;
   };
 
-  const accessibleCourseRecords = courses.filter((course) =>
-    course.categories.some(({ categoryId }) => canAccessCategory(categoryId)),
+  const selectedCategoryIds = categoryId
+    ? collectDescendantCategoryIds(categoryId, categoryLinks)
+    : null;
+  const accessibleCategoryIds = selectedCategoryIds
+    ? [...selectedCategoryIds].filter((id) => grantedCategoryIds.has(id))
+    : [...grantedCategoryIds];
+  const accessibleCourseRecords = accessibleCategoryIds.length === 0
+    ? []
+    : await db.course.findMany({
+        where: {
+          published: true,
+          categories: {
+            some: {
+              categoryId: { in: accessibleCategoryIds },
+            },
+          },
+          ...(query
+            ? {
+                OR: [
+                  { title: { contains: query, mode: "insensitive" } },
+                  { description: { contains: query, mode: "insensitive" } },
+                  { prof: { fullName: { contains: query, mode: "insensitive" } } },
+                  { tags: { some: { tag: { name: { contains: query, mode: "insensitive" } } } } },
+                  { categories: { some: { category: { name: { contains: query, mode: "insensitive" } } } } },
+                ],
+              }
+            : {}),
+        },
+        include: {
+          prof: { select: { id: true, fullName: true } },
+          categories: { include: { category: true } },
+          tags: { include: { tag: true } },
+          chapters: {
+            select: {
+              id: true,
+              title: true,
+              durationSeconds: true,
+              videoStatus: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+  const filteredCourseRecords = accessibleCourseRecords.filter((course) =>
+    course.categories.some(({ categoryId: courseCategoryId }) =>
+      canAccessCategory(courseCategoryId),
+    ),
   );
 
-  const accessibleCourses = accessibleCourseRecords.map((course) => ({
+  const accessibleCourses = filteredCourseRecords.map((course) => ({
       id: course.id,
       title: course.title,
       description: course.description ?? "",
@@ -153,7 +193,7 @@ export const GET = withErrorHandler(async () => {
       ).length,
   }));
 
-  const courseProgress = accessibleCourseRecords.map((course) => {
+  const courseProgress = filteredCourseRecords.map((course) => {
     const entries = progressEntries.filter((entry) => entry.chapter.courseId === course.id);
     const totalChapters = course.chapters.length;
     const completedChapters = entries.filter((entry) => entry.completed).length;
@@ -202,6 +242,20 @@ export const GET = withErrorHandler(async () => {
     .filter((item) => item.completedChapters < item.totalChapters)
     .sort((a, b) => a.percent - b.percent)[0] ?? null;
 
+  const readyChapters = filteredCourseRecords.flatMap((course) =>
+    course.chapters
+      .filter((chapter) => chapter.videoStatus === "READY")
+      .map((chapter) => ({
+        courseId: course.id,
+        courseTitle: course.title,
+        chapterId: chapter.id,
+        chapterTitle: chapter.title,
+      })),
+  );
+  const recommendedChapter = readyChapters.length > 0
+    ? readyChapters[Math.floor(Math.random() * readyChapters.length)]
+    : null;
+
   const hasActiveSubscription = activeSubscriptions.length > 0;
 
   return ok({
@@ -240,13 +294,14 @@ export const GET = withErrorHandler(async () => {
             percent: nextUp.percent,
           }
         : null,
+      recommendedChapter,
       courseProgress,
     },
     hasActivePack: hasActiveSubscription,
     hasActiveSubscription,
     needsCategorySelection: subscriptionsNeedingCategories.length > 0,
     categorySelectionSubscriptionId: subscriptionsNeedingCategories[0]?.id ?? null,
-    availableCategories: [...new Map(availableCategories.map((category) => [category.id, category])).values()],
+    availableCategories: [...new Map(filterCategories.map((category) => [category.id, category])).values()],
     subscriptions: activeSubscriptions.map((subscription) => ({
       id: subscription.id,
       bacTypeId: subscription.bacTypeId,

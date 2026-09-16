@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { ok, withErrorHandler } from "@/lib/api-response";
 import { parseBody } from "@/lib/parse-body";
 import { ConflictError } from "@/lib/errors";
+import { sendVerificationEmail } from "@/lib/verification-email";
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -14,10 +15,25 @@ const registerSchema = z.object({
 export const POST = withErrorHandler(async (req) => {
   const body = await parseBody(req, registerSchema);
 
-  const existing = await db.user.findUnique({ where: { email: body.email } });
-  if (existing) throw new ConflictError("An account with this email already exists");
+  const email = body.email.trim().toLowerCase();
+  const existing = await db.user.findUnique({ where: { email } });
+  if (existing) {
+    if (existing.passwordHash && !existing.emailVerified) {
+      const verificationUrl = await sendVerificationEmail(existing);
+      return ok({
+        requiresVerification: true,
+        email,
+        resentVerification: true,
+        ...(process.env.NODE_ENV !== "production"
+          ? { devVerificationUrl: verificationUrl }
+          : {}),
+      });
+    }
 
-  const passwordHash = await bcrypt.hash(body.password, 10);
+    throw new ConflictError("An account with this email already exists");
+  }
+
+  const passwordHash = await bcrypt.hash(body.password, 12);
 
   const studentRole = await db.role.upsert({
     where: { slug: "student" },
@@ -27,13 +43,22 @@ export const POST = withErrorHandler(async (req) => {
 
   const user = await db.user.create({
     data: {
-      email: body.email,
+      email,
       passwordHash,
       fullName: body.fullName,
+      emailVerified: null,
       roles: { create: { roleId: studentRole.id } },
     },
   });
 
+  const verificationUrl = await sendVerificationEmail(user);
+
   // Never return passwordHash, even implicitly — select only what's safe.
-  return ok({ id: user.id, email: user.email, fullName: user.fullName }, 201);
+  return ok({
+    requiresVerification: true,
+    email: user.email,
+    ...(process.env.NODE_ENV !== "production"
+      ? { devVerificationUrl: verificationUrl }
+      : {}),
+  }, 201);
 });
