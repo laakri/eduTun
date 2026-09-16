@@ -7,13 +7,15 @@ import { ok, withErrorHandler } from "@/lib/api-response";
 import { parseBody } from "@/lib/parse-body";
 
 const requestSchema = z.object({
-  planId: z.string().cuid(),
+  planId: z.string().cuid().optional(),
   bacTypeId: z.string().cuid(),
 });
 
 export const GET = withErrorHandler(async () => {
-  const user = await requireUser();
-  const [requests, subscriptions] = await Promise.all([
+  const sessionUser = await requireUser();
+  const user = await db.user.findUnique({ where: { email: sessionUser.email }, select: { id: true } });
+  if (!user) throw new NotFoundError("User");
+  const [requests, subscriptions, profile] = await Promise.all([
     db.bacAccessRequest.findMany({
       where: { userId: user.id },
       include: {
@@ -33,52 +35,71 @@ export const GET = withErrorHandler(async () => {
       },
       orderBy: { createdAt: "desc" },
     }),
+    db.user.findUnique({
+      where: { id: user.id },
+      select: { bacType: { select: { id: true, name: true, slug: true } } },
+    }),
   ]);
 
-  return ok({ requests, subscriptions });
+  return ok({ requests, subscriptions, bacType: profile?.bacType ?? null });
 });
 
 export const POST = withErrorHandler(async (req) => {
-  const user = await requireUser();
+  const sessionUser = await requireUser();
+  const user = await db.user.findUnique({ where: { email: sessionUser.email }, select: { id: true } });
+  if (!user) throw new NotFoundError("User");
   const input = await parseBody(req, requestSchema);
-  const plan = await db.subscriptionPlan.findUnique({
-    where: { id: input.planId },
-    select: { id: true, domainId: true, isActive: true },
-  });
+  if (input.planId) {
+    const plan = await db.subscriptionPlan.findFirst({
+      where: { id: input.planId, isActive: true },
+      select: { id: true, domainId: true },
+    });
 
-  if (!plan || !plan.isActive) throw new NotFoundError("Subscription plan");
-  if (plan.domainId !== input.bacTypeId) {
-    throw new ValidationError("The selected Bac type does not match this access plan.");
+    if (!plan) throw new NotFoundError("Subscription plan");
+    const selectedBacType = await db.categoryRelation.findUnique({
+      where: { parentId_childId: { parentId: plan.domainId, childId: input.bacTypeId } },
+      select: { childId: true },
+    });
+    if (!selectedBacType) throw new ValidationError("The selected Bac type does not match this access plan.");
+
+    const existing = await db.bacAccessRequest.findFirst({
+      where: { userId: user.id, planId: plan.id, bacTypeId: input.bacTypeId, status: { in: ["pending", "approved"] } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (existing?.status === "pending") throw new ConflictError("Your access request is already waiting for admin approval.");
+    if (existing?.status === "approved") throw new ConflictError("You already have approved access for this Bac type.");
+
+    const request = await db.bacAccessRequest.create({
+      data: { userId: user.id, planId: plan.id, bacTypeId: input.bacTypeId },
+      include: {
+        plan: { select: { id: true, name: true, slug: true } },
+        bacType: { select: { id: true, name: true, slug: true } },
+      },
+    });
+    return ok({ request }, 201);
   }
 
-  const existing = await db.bacAccessRequest.findFirst({
+  const bac = await db.category.findUnique({ where: { slug: "bac" }, select: { id: true } });
+  if (!bac) throw new NotFoundError("Bac category");
+
+  const selectedBacType = await db.categoryRelation.findUnique({
     where: {
-      userId: user.id,
-      planId: input.planId,
-      bacTypeId: input.bacTypeId,
-      status: { in: ["pending", "approved"] },
+      parentId_childId: {
+        parentId: bac.id,
+        childId: input.bacTypeId,
+      },
     },
-    orderBy: { createdAt: "desc" },
+    select: { childId: true },
   });
-
-  if (existing?.status === "pending") {
-    throw new ConflictError("Your access request is already waiting for admin approval.");
-  }
-  if (existing?.status === "approved") {
-    throw new ConflictError("You already have approved access for this Bac type.");
+  if (!selectedBacType) {
+    throw new ValidationError("The selected category is not a valid Bac type.");
   }
 
-  const request = await db.bacAccessRequest.create({
-    data: {
-      userId: user.id,
-      planId: input.planId,
-      bacTypeId: input.bacTypeId,
-    },
-    include: {
-      plan: { select: { id: true, name: true, slug: true } },
-      bacType: { select: { id: true, name: true, slug: true } },
-    },
+  const updatedUser = await db.user.update({
+    where: { id: user.id },
+    data: { bacTypeId: input.bacTypeId },
+    select: { bacType: { select: { id: true, name: true, slug: true } } },
   });
 
-  return ok({ request }, 201);
+  return ok({ bacType: updatedUser.bacType });
 });

@@ -14,9 +14,11 @@ import {
   UserRound,
   ChevronDown,
   ChevronRight,
+  X,
+  Megaphone,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 
@@ -65,6 +67,47 @@ const WORKSPACE_LINKS = [
 const ADMIN_LINKS = [
   { href: "/admin", label: "Admin", icon: LayoutDashboard },
 ];
+
+// Set this to whatever you want announced. Swap it for a CMS/API value if needed.
+const ANNOUNCEMENT = {
+  message: "New: bundle packs are 20% off this week.",
+  href: "/packs",
+  linkLabel: "See packs",
+};
+
+function AnnouncementBar() {
+  const [dismissed, setDismissed] = useState(false);
+
+  if (dismissed || !ANNOUNCEMENT) return null;
+
+  return (
+    <div className="relative w-full bg-neutral-900 text-neutral-100 dark:bg-black">
+      <div className="mx-auto flex h-9 max-w-7xl items-center justify-center gap-2 px-4 text-xs sm:text-[13px]">
+        <Megaphone className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
+        <span className="truncate">
+          {ANNOUNCEMENT.message}
+          {ANNOUNCEMENT.href && (
+            <Link
+              href={ANNOUNCEMENT.href}
+              className="ml-2 font-medium underline underline-offset-2 hover:text-white"
+            >
+              {ANNOUNCEMENT.linkLabel ?? "Learn more"}
+            </Link>
+          )}
+        </span>
+
+        <button
+          type="button"
+          onClick={() => setDismissed(true)}
+          aria-label="Dismiss announcement"
+          className="absolute right-3 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-neutral-400 transition hover:bg-white/10 hover:text-white"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function ThemeToggle() {
   const { setTheme, theme } = useTheme();
@@ -190,12 +233,14 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-transparent bg-background/80 backdrop-blur-md">
-      <div className="flex h-14 items-center gap-4 px-4">
+      <AnnouncementBar />
+
+      <div className="mx-auto flex h-14 w-full max-w-7xl items-center gap-4 px-4">
         {/* LEFT - BRAND */}
 
         <div>
           <Link href="/" className="font-semibold text-foreground">
-            EduTun<span className="text-primary">.</span>
+            Curio<span className="text-primary">.</span>
           </Link>
         </div>
 
@@ -264,7 +309,7 @@ export default function Navbar() {
               <SheetContent side="right" className="flex w-[85vw] max-w-sm flex-col gap-0 p-0">
                 <SheetHeader className="border-b border-muted px-5 py-4">
                   <SheetTitle className="text-left font-semibold text-foreground">
-                    EduTun<span className="text-primary">.</span>
+                    Curio<span className="text-primary">.</span>
                   </SheetTitle>
                 </SheetHeader>
 
@@ -348,39 +393,39 @@ export default function Navbar() {
           </div>
         </div>
       </div>
-  {isManager && (
-  <div className="hidden border-t border-border bg-background md:block">
-    <nav className="mx-auto flex h-11 max-w-7xl items-center justify-start gap-7 overflow-x-auto px-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      {[...WORKSPACE_LINKS, ...(session?.user?.roles?.includes("admin") ? ADMIN_LINKS : [])].map((link) => {
-        const active =
-          pathname === link.href || pathname.startsWith(`${link.href}/`);
+      {isManager && (
+        <div className="hidden border-t border-border bg-background md:block">
+          <nav className="mx-auto flex h-11 max-w-7xl items-center justify-start gap-7 overflow-x-auto px-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {[...WORKSPACE_LINKS, ...(session?.user?.roles?.includes("admin") ? ADMIN_LINKS : [])].map((link) => {
+              const active =
+                pathname === link.href || pathname.startsWith(`${link.href}/`);
 
-        return (
-          <Link
-            key={link.href}
-            href={link.href}
-            className={[
-              "group relative flex h-full shrink-0 items-center gap-1.5 text-[13px] font-medium transition-colors",
-              active
-                ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            ].join(" ")}
-          >
-            <link.icon className="size-[14px]" />
-            <span>{link.label}</span>
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={[
+                    "group relative flex h-full shrink-0 items-center gap-1.5 text-[13px] font-medium transition-colors",
+                    active
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  ].join(" ")}
+                >
+                  <link.icon className="size-[14px]" />
+                  <span>{link.label}</span>
 
-            <span
-              className={[
-                "absolute bottom-0 left-0 h-0.5 rounded-full bg-primary transition-all duration-200",
-                active ? "w-full" : "w-0 group-hover:w-full",
-              ].join(" ")}
-            />
-          </Link>
-        );
-      })}
-    </nav>
-  </div>
-)}
+                  <span
+                    className={[
+                      "absolute bottom-0 left-0 h-0.5 rounded-full bg-primary transition-all duration-200",
+                      active ? "w-full" : "w-0 group-hover:w-full",
+                    ].join(" ")}
+                  />
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+      )}
     </header>
   );
 }

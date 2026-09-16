@@ -15,7 +15,11 @@ export default function AuthRedirectPage() {
       .then((response) => response.json())
       .then((session) => {
         if (!cancelled) {
-          router.replace(getDefaultAppPath(session?.user?.roles ?? []));
+          const roles = session?.user?.roles ?? [];
+          const destination = roles.some((role: string) => ["admin", "prof"].includes(role))
+            ? getDefaultAppPath(roles)
+            : "/onboarding";
+          router.replace(destination);
           router.refresh();
         }
       })

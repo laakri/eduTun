@@ -70,6 +70,7 @@ model User {
   bio          String?  @db.Text
   specialties  String?
   websiteUrl   String?
+  bacTypeId    String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -91,6 +92,7 @@ model User {
   ratingsGiven             ProfessorRating[]  @relation("ProfessorRatingUser")
   chapterVotes             ChapterVote[]
   chapterComments          ChapterComment[]
+  bacType                  Category?          @relation("StudentBacType", fields: [bacTypeId], references: [id], onDelete: SetNull)
 }
 
 model Role {
@@ -133,6 +135,7 @@ model Category {
   profApplications  ProfApplicationCategory[]
   bacAccessRequests  BacAccessRequest[] @relation("BacTypeRequests")
   subscriptionSelections UserSubscriptionCategory[]
+  studentUsers       User[] @relation("StudentBacType")
 }
 
 model CategoryRelation {

@@ -922,6 +922,7 @@ export default function LearnCoursePage() {
             {chapter?.playbackUrl ? (
               <div className="overflow-hidden rounded-2xl bg-black shadow-sm">
                 <VideoPlayer
+                  key={chapter.id}
                   src={chapter.playbackUrl}
                   title={chapter.title}
                   chapters={chapter.sections.map((section: Section) => ({

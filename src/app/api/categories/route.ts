@@ -8,7 +8,7 @@ export const GET = withErrorHandler(async () => {
   const bacRoot = await db.category.findUnique({
     where: { slug: "bac" },
     include: {
-      childLinks: {
+      parentLinks: {
         orderBy: { order: "asc" },
         include: { child: { select: { id: true, name: true, slug: true } } },
       },
@@ -24,7 +24,7 @@ export const GET = withErrorHandler(async () => {
     name: bacRoot.name,
     slug: bacRoot.slug,
     parentId: null,
-    children: bacRoot.childLinks.map((link) => ({
+    children: bacRoot.parentLinks.map((link) => ({
       id: link.child.id,
       name: link.child.name,
       slug: link.child.slug,

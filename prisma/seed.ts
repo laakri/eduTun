@@ -175,36 +175,174 @@ async function main() {
     });
   }
 
-  const bacSubjects = [
-    { slug: "subject-mathematiques", name: "Mathématiques" },
-    { slug: "subject-physique", name: "Physique" },
-    { slug: "subject-chimie", name: "Chimie" },
-    { slug: "subject-sciences-vie-terre", name: "Sciences de la vie et de la Terre" },
-    { slug: "subject-informatique", name: "Informatique" },
-    { slug: "subject-algorithmique", name: "Algorithmique" },
-    { slug: "subject-francais", name: "Français" },
-    { slug: "subject-anglais", name: "Anglais" },
-    { slug: "subject-arabe", name: "Arabe" },
-    { slug: "subject-histoire", name: "Histoire" },
-    { slug: "subject-geographie", name: "Géographie" },
-    { slug: "subject-philosophie", name: "Philosophie" },
-  ];
+const bacSubjects = [
+  { slug: "subject-mathematiques", name: "Mathématiques" },
+  { slug: "subject-physique", name: "Sciences physiques" },
+  { slug: "subject-chimie", name: "Chimie" },
+  { slug: "subject-sciences-vie-terre", name: "Sciences de la vie et de la Terre" },
+  { slug: "subject-informatique", name: "Informatique" },
+  { slug: "subject-algorithmique", name: "Algorithmique & Programmation" },
+  { slug: "subject-sti", name: "Sciences et Technologies Informatiques" },
+  { slug: "subject-technologie", name: "Technologie" },
+  { slug: "subject-tp-technologie", name: "Travaux pratiques de technologie" },
+  { slug: "subject-francais", name: "Français" },
+  { slug: "subject-anglais", name: "Anglais" },
+  { slug: "subject-arabe", name: "Arabe" },
+  { slug: "subject-philosophie", name: "Philosophie" },
+  { slug: "subject-histoire-geographie", name: "Histoire-Géographie" },
+  { slug: "subject-pensee-islamique", name: "Pensée islamique" },
+  { slug: "subject-economie", name: "Économie" },
+  { slug: "subject-gestion", name: "Gestion" },
+  { slug: "subject-sciences-biologiques", name: "Sciences biologiques" },
+  { slug: "subject-sport", name: "Sport" },
+  { slug: "subject-education-physique", name: "Éducation physique" },
+];
 
-  const subjectCategories: Record<string, { id: string; name: string }> = {};
-  for (const category of bacSubjects) {
-    const existingCategory = await db.category.upsert({
-      where: { slug: category.slug },
-      update: { name: category.name },
-      create: { ...category },
+const subjectCategories: Record<string, { id: string; name: string }> = {};
+
+for (const category of bacSubjects) {
+  const existingCategory = await db.category.upsert({
+    where: { slug: category.slug },
+    update: { name: category.name },
+    create: category,
+  });
+
+  subjectCategories[category.slug] = existingCategory;
+}
+
+  await db.categoryRelation.deleteMany({
+    where: {
+      parentId: bac.id,
+      childId: { in: Object.values(subjectCategories).map((category) => category.id) },
+    },
+  });
+
+const bacTypes = [
+  {
+    slug: "bac-math",
+    name: "Bac Mathématiques",
+    subjects: [
+      "subject-mathematiques",
+      "subject-physique",
+      "subject-sciences-vie-terre",
+      "subject-informatique",
+      "subject-francais",
+      "subject-anglais",
+      "subject-arabe",
+      "subject-philosophie",
+      "subject-sport",
+    ],
+  },
+
+  {
+    slug: "bac-sciences",
+    name: "Bac Sciences expérimentales",
+    subjects: [
+      "subject-sciences-vie-terre",
+      "subject-physique",
+      "subject-chimie",
+      "subject-mathematiques",
+      "subject-informatique",
+      "subject-francais",
+      "subject-anglais",
+      "subject-arabe",
+      "subject-philosophie",
+      "subject-sport",
+    ],
+  },
+
+  {
+    slug: "bac-info",
+    name: "Bac Sciences de l'informatique",
+    subjects: [
+      "subject-mathematiques",
+      "subject-algorithmique",
+      "subject-sti",
+      "subject-physique",
+      "subject-francais",
+      "subject-anglais",
+      "subject-arabe",
+      "subject-philosophie",
+      "subject-sport",
+    ],
+  },
+
+  {
+    slug: "bac-technique",
+    name: "Bac Sciences techniques",
+    subjects: [
+      "subject-technologie",
+      "subject-mathematiques",
+      "subject-physique",
+      "subject-tp-technologie",
+      "subject-francais",
+      "subject-anglais",
+      "subject-arabe",
+      "subject-philosophie",
+      "subject-informatique",
+      "subject-sport",
+    ],
+  },
+
+  {
+    slug: "bac-economie-gestion",
+    name: "Bac Économie & Gestion",
+    subjects: [
+      "subject-economie",
+      "subject-gestion",
+      "subject-mathematiques",
+      "subject-histoire-geographie",
+      "subject-francais",
+      "subject-anglais",
+      "subject-arabe",
+      "subject-philosophie",
+      "subject-informatique",
+      "subject-sport",
+    ],
+  },
+
+  {
+    slug: "bac-lettres",
+    name: "Bac Lettres",
+    subjects: [
+      "subject-arabe",
+      "subject-philosophie",
+      "subject-histoire-geographie",
+      "subject-francais",
+      "subject-anglais",
+      "subject-pensee-islamique",
+      "subject-informatique",
+      "subject-sport",
+    ],
+  },
+
+];
+
+  await db.category.deleteMany({ where: { slug: "bac-sport" } });
+
+  for (const [typeIndex, type] of bacTypes.entries()) {
+    const bacType = await db.category.upsert({
+      where: { slug: type.slug },
+      update: { name: type.name },
+      create: { slug: type.slug, name: type.name },
     });
-
-    subjectCategories[category.slug] = existingCategory;
 
     await db.categoryRelation.upsert({
-      where: { parentId_childId: { parentId: bac.id, childId: existingCategory.id } },
-      update: { order: bacSubjects.indexOf(category) },
-      create: { parentId: bac.id, childId: existingCategory.id, order: bacSubjects.indexOf(category) },
+      where: { parentId_childId: { parentId: bac.id, childId: bacType.id } },
+      update: { order: typeIndex },
+      create: { parentId: bac.id, childId: bacType.id, order: typeIndex },
     });
+
+    for (const [subjectIndex, subjectSlug] of type.subjects.entries()) {
+      const subject = subjectCategories[subjectSlug];
+      if (!subject) continue;
+
+      await db.categoryRelation.upsert({
+        where: { parentId_childId: { parentId: bacType.id, childId: subject.id } },
+        update: { order: subjectIndex },
+        create: { parentId: bacType.id, childId: subject.id, order: subjectIndex },
+      });
+    }
   }
 
   async function upsertSubscriptionPlan(input: {
@@ -288,8 +426,8 @@ async function main() {
     { title: "English grammar essentials", subject: "subject-anglais", description: "Les structures grammaticales indispensables pour réussir l'épreuve." },
     { title: "English writing practice", subject: "subject-anglais", description: "Améliorer son vocabulaire et rédiger avec confiance en anglais." },
     { title: "الحجاج والتعبير", subject: "subject-arabe", description: "منهجية فهم النصوص وبناء إجابة عربية منظمة." },
-    { title: "الحضارات القديمة", subject: "subject-histoire", description: "Repères et méthodes pour analyser les grandes périodes historiques." },
-    { title: "Le monde contemporain", subject: "subject-geographie", description: "Territoires, échanges et grands équilibres du monde actuel." },
+    { title: "الحضارات القديمة", subject: "subject-histoire-geographie", description: "Repères et méthodes pour analyser les grandes périodes historiques." },
+    { title: "Le monde contemporain", subject: "subject-histoire-geographie", description: "Territoires, échanges et grands équilibres du monde actuel." },
     { title: "Méthode de dissertation", subject: "subject-philosophie", description: "Construire une problématique et défendre une réflexion personnelle." },
     { title: "Notions clés de philosophie", subject: "subject-philosophie", description: "Travail guidé sur les notions essentielles du programme." },
   ];

@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Check, Loader2 } from "lucide-react";
+import { Check, ChevronRight, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -46,26 +47,13 @@ export default function PacksPage() {
         const nextPlans: SubscriptionPlan[] = json.data?.plans ?? [];
         const firstPlan = nextPlans[0];
 
-        setPlans(nextPlans);
 
-        if (firstPlan) {
-          setSelectedPlanId(firstPlan.id);
-        } else {
-          setSelectedPlanId(null);
-        }
 
         const accessResponse = await fetch("/api/bac-access-requests");
         if (accessResponse.ok) {
           const accessJson = await accessResponse.json();
           const statuses: Record<string, string> = {};
           for (const request of accessJson.data?.requests ?? []) {
-            statuses[request.planId] = request.status;
-          }
-          for (const subscription of accessJson.data?.subscriptions ?? []) {
-            statuses[subscription.plan.id] = "approved";
-          }
-          setRequestStatuses(statuses);
-        }
       } catch (reason) {
         setError(
           reason instanceof Error
@@ -83,21 +71,21 @@ export default function PacksPage() {
   const selectedPlan = useMemo(
     () =>
       plans.find((plan) => plan.id === selectedPlanId) ??
+      null,
+    try {
+  }, []);
+          "Content-Type": "application/json",
+  const selectedPlan = useMemo(
+    () =>
+      plans.find((plan) => plan.id === selectedPlanId) ??
       plans[0] ??
       null,
     [plans, selectedPlanId],
   );
-
+        },
   async function requestAccess(plan: SubscriptionPlan) {
     setError(null);
     setRequestingPlanId(plan.id);
-
-    try {
-      const response = await fetch("/api/bac-access-requests", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           planId: plan.id,
           bacTypeId: plan.domain.id,
@@ -142,13 +130,12 @@ export default function PacksPage() {
 
         <div className="mx-auto mt-8 max-w-2xl rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-center text-sm text-muted-foreground">
           Select your Bac type and request access. An admin reviews the request before your learning space is activated; no payment is taken here.
-        </div>
-
+            Choose a Bac learning plan. You will confirm your program and payment method on the next step.
         {error && (
           <div className="mx-auto mt-6 max-w-2xl rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-center text-sm text-destructive">
             {error}
           </div>
-        )}
+          Prices are shown in Tunisian dinars. After checkout, an admin reviews your payment request before activating access.
 
         {/* Plans */}
         {loading ? (
@@ -231,8 +218,10 @@ export default function PacksPage() {
                   {/* Divider */}
                   <div className="my-6 h-px bg-border" />
 
-                  {/* Features */}
-                  <div className="flex-1">
+                    <span className="text-2xl font-semibold tracking-tight">
+                      {new Intl.NumberFormat("fr-TN", { style: "currency", currency: "TND" }).format(plan.yearlyPriceCents / 100)}
+                    </span>
+                    <p className="mt-1 text-sm text-muted-foreground">per year, pending admin confirmation</p>
                     <p className="mb-4 text-sm font-medium">
                       This pack includes:
                     </p>
@@ -274,24 +263,12 @@ export default function PacksPage() {
                     disabled={isRequesting || requestStatus === "pending" || requestStatus === "approved"}
                   >
                     {isRequesting ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Sending request...
-                      </>
-                    ) : requestStatus === "pending" ? (
+                    asChild
+                    onClick={(event) => event.stopPropagation()}
                       "Awaiting admin approval"
-                    ) : requestStatus === "approved" ? (
-                      "Access approved"
-                    ) : (
-                      "Request access"
-                    )}
-                  </Button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
+                    <Link href={`/packs/checkout?plan=${encodeURIComponent(plan.id)}`}>
+                      Continue to payment <ChevronRight className="ml-2 h-4 w-4" />
+                    </Link>
         {!loading && plans.length > 0 && (
           <p className="mx-auto mt-8 max-w-xl text-center text-xs text-muted-foreground">
             After approval, choose the subjects you want to study inside your Bac access.
@@ -301,3 +278,5 @@ export default function PacksPage() {
     </main>
   );
 }
+            Your learning space becomes available after the admin approves the submitted payment request.
+                      "Awaiting admin approval"

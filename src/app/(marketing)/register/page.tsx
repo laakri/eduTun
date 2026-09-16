@@ -88,7 +88,10 @@ function AuthForm() {
 
     const session = await sessionResponse.json();
 
-    const destination = getDefaultAppPath(session?.user?.roles ?? []);
+    const roles = session?.user?.roles ?? [];
+    const destination = roles.some((role: string) => ["admin", "prof"].includes(role))
+      ? getDefaultAppPath(roles)
+      : "/onboarding";
 
     router.push(destination);
     router.refresh();
