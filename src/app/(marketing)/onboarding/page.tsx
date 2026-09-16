@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, CheckCircle2, GraduationCap, Loader2, Users } from "lucide-react";
 
@@ -12,6 +13,7 @@ type AccountType = "student" | "professor";
 type Step = "type" | "details";
 
 export default function OnboardingPage() {
+  const router = useRouter();
   const [step, setStep] = useState<Step>("type");
   const [accountType, setAccountType] = useState<AccountType | null>(null);
   const [bacTypes, setBacTypes] = useState<BacType[]>([]);
@@ -77,7 +79,7 @@ export default function OnboardingPage() {
       const json = await response.json();
       if (!response.ok) throw new Error(json.error?.message ?? "Could not save your Bac choice.");
       setAccess({ status: "saved", bacTypeName: bacTypes.find((item) => item.id === bacTypeId)?.name ?? null });
-      window.location.assign("/packs");
+      router.push("/packs");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not save your Bac choice.");
     } finally {

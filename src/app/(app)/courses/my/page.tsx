@@ -42,10 +42,6 @@ export default function MyCoursesPage() {
   const [deleting, setDeleting] = useState(false);
   const [courseToDelete, setCourseToDelete] = useState<Course | null>(null);
 
-  useEffect(() => {
-    fetchCourses();
-  }, []);
-
   async function fetchCourses() {
     try {
       const res = await fetch("/api/courses/my");
@@ -62,6 +58,13 @@ export default function MyCoursesPage() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    const load = async () => {
+      await fetchCourses();
+    };
+    void load();
+  }, []);
 
   async function handleDelete() {
     if (!courseToDelete) return;

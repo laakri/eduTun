@@ -8,275 +8,90 @@ import { Button } from "@/components/ui/button";
 
 type SubscriptionPlan = {
   id: string;
-  slug: string;
   name: string;
   description: string | null;
-  monthlyPriceCents: number;
-  quarterlyPriceCents: number;
   yearlyPriceCents: number;
-  domain: {
-    id: string;
-    name: string;
-    slug: string;
-  };
+  domain: { id: string; name: string; slug: string };
 };
+
+function formatPrice(cents: number) {
+  return new Intl.NumberFormat("fr-TN", {
+    style: "currency",
+    currency: "TND",
+  }).format(cents / 100);
+}
 
 export default function PacksPage() {
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
-  const [requestingPlanId, setRequestingPlanId] = useState<string | null>(
-    null,
-  );
-  const [requestStatuses, setRequestStatuses] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadPlans() {
       try {
         const response = await fetch("/api/subscriptions");
-
         const json = await response.json();
-
         if (!response.ok) {
-          throw new Error(
-            json.error?.message ?? "Unable to load subscription plans.",
-          );
+          throw new Error(json.error?.message ?? "Unable to load subscription plans.");
         }
-
-        const nextPlans: SubscriptionPlan[] = json.data?.plans ?? [];
-        const firstPlan = nextPlans[0];
-
-
-
-        const accessResponse = await fetch("/api/bac-access-requests");
-        if (accessResponse.ok) {
-          const accessJson = await accessResponse.json();
-          const statuses: Record<string, string> = {};
-          for (const request of accessJson.data?.requests ?? []) {
+        const nextPlans = (json.data?.plans ?? []) as SubscriptionPlan[];
+        setPlans(nextPlans);
+        setSelectedPlanId(nextPlans[0]?.id ?? null);
       } catch (reason) {
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : "Unable to load subscription plans.",
-        );
+        setError(reason instanceof Error ? reason.message : "Unable to load subscription plans.");
       } finally {
         setLoading(false);
       }
     }
 
-    loadPlans();
+    void loadPlans();
   }, []);
 
   const selectedPlan = useMemo(
-    () =>
-      plans.find((plan) => plan.id === selectedPlanId) ??
-      null,
-    try {
-  }, []);
-          "Content-Type": "application/json",
-  const selectedPlan = useMemo(
-    () =>
-      plans.find((plan) => plan.id === selectedPlanId) ??
-      plans[0] ??
-      null,
+    () => plans.find((plan) => plan.id === selectedPlanId) ?? plans[0] ?? null,
     [plans, selectedPlanId],
   );
-        },
-  async function requestAccess(plan: SubscriptionPlan) {
-    setError(null);
-    setRequestingPlanId(plan.id);
-        body: JSON.stringify({
-          planId: plan.id,
-          bacTypeId: plan.domain.id,
-        }),
-      });
-
-      const json = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(
-          json.error?.message ?? "Could not submit your access request.",
-        );
-      }
-
-      setRequestStatuses((current) => ({ ...current, [plan.id]: "pending" }));
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Could not submit your access request.",
-      );
-    } finally {
-      setRequestingPlanId(null);
-    }
-  }
 
   return (
     <main className="min-h-[calc(100svh-56px)] bg-background text-foreground">
       <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 lg:px-10">
-        {/* Header */}
         <div className="mx-auto max-w-2xl text-center">
-
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-            Choose your learning pack
-          </h1>
-
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Choose your learning pack</h1>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-muted-foreground sm:text-base">
-            Pick the plan that fits your learning goals. You can change your
-            pack whenever you want.
+            Choose a Bac learning plan. You will confirm your program and payment method on the next step.
           </p>
         </div>
-
         <div className="mx-auto mt-8 max-w-2xl rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-center text-sm text-muted-foreground">
-          Select your Bac type and request access. An admin reviews the request before your learning space is activated; no payment is taken here.
-            Choose a Bac learning plan. You will confirm your program and payment method on the next step.
-        {error && (
-          <div className="mx-auto mt-6 max-w-2xl rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-center text-sm text-destructive">
-            {error}
-          </div>
           Prices are shown in Tunisian dinars. After checkout, an admin reviews your payment request before activating access.
-
-        {/* Plans */}
+        </div>
+        {error && <div className="mx-auto mt-6 max-w-2xl rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-center text-sm text-destructive">{error}</div>}
         {loading ? (
-          <div className="mx-auto mt-12 grid max-w-6xl gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {[0, 1, 2].map((index) => (
-              <div
-                key={index}
-                className="h-[460px] animate-pulse rounded-2xl bg-muted"
-              />
-            ))}
-          </div>
+          <div className="flex justify-center py-20"><Loader2 className="size-5 animate-spin text-muted-foreground" /></div>
         ) : plans.length === 0 ? (
-          <div className="mx-auto mt-12 max-w-lg rounded-2xl border border-border p-10 text-center">
-            <p className="text-sm text-muted-foreground">
-              No subscription packs are available right now.
-            </p>
-          </div>
+          <div className="mx-auto mt-12 max-w-lg rounded-2xl border border-border p-10 text-center text-sm text-muted-foreground">No subscription packs are available right now.</div>
         ) : (
-          <div
-            className={`mx-auto mt-12 grid max-w-6xl gap-5 ${
-              plans.length === 1
-                ? "max-w-md"
-                : plans.length === 2
-                  ? "max-w-4xl md:grid-cols-2"
-                  : "lg:grid-cols-3"
-            }`}
-          >
+          <div className={`mx-auto mt-12 grid max-w-6xl gap-5 ${plans.length === 1 ? "max-w-md" : plans.length === 2 ? "max-w-4xl md:grid-cols-2" : "lg:grid-cols-3"}`}>
             {plans.map((plan, index) => {
               const isSelected = selectedPlan?.id === plan.id;
-              const isPopular =
-                plans.length >= 3 && index === Math.floor(plans.length / 2);
-              const isRequesting = requestingPlanId === plan.id;
-              const requestStatus = requestStatuses[plan.id];
-
+              const isPopular = plans.length >= 3 && index === Math.floor(plans.length / 2);
               return (
-                <div
-                  key={plan.id}
-                  onClick={() => setSelectedPlanId(plan.id)}
-                  className={`relative flex cursor-pointer flex-col rounded-2xl border p-6 transition-all duration-200 ${
-                    isPopular
-                      ? "border-primary shadow-lg shadow-primary/10"
-                      : isSelected
-                        ? "border-primary/50"
-                        : "border-border"
-                  } ${
-                    isSelected
-                      ? "bg-card"
-                      : "bg-card/50 hover:border-primary/30 hover:bg-card"
-                  }`}
-                >
-                  {/* Popular badge */}
-                  {isPopular && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">
-                      Most popular
-                    </div>
-                  )}
-
-                  {/* Pack header */}
-                  <div>
-                    <p className="text-sm font-medium text-primary">
-                      {plan.domain.name}
-                    </p>
-
-                    <h2 className="mt-3 text-2xl font-semibold tracking-tight">
-                      {plan.name}
-                    </h2>
-
-                    <p className="mt-2 min-h-12 text-sm leading-5 text-muted-foreground">
-                      {plan.description ??
-                        "Everything you need to keep learning and improving."}
-                    </p>
-                  </div>
-
-                  {/* Access status */}
-                  <div className="mt-7">
-                    <span className="text-2xl font-semibold tracking-tight">Admin approval</span>
-                    <p className="mt-1 text-sm text-muted-foreground">Access is granted after review.</p>
-                  </div>
-
-                  {/* Divider */}
+                <div key={plan.id} onClick={() => setSelectedPlanId(plan.id)} className={`relative flex cursor-pointer flex-col rounded-2xl border p-6 transition-colors ${isPopular ? "border-primary shadow-lg shadow-primary/10" : isSelected ? "border-primary/50" : "border-border"} ${isSelected ? "bg-card" : "bg-card/50 hover:border-primary/30 hover:bg-card"}`}>
+                  {isPopular && <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">Most popular</div>}
+                  <p className="text-sm font-medium text-primary">{plan.domain.name}</p>
+                  <h2 className="mt-3 text-2xl font-semibold tracking-tight">{plan.name}</h2>
+                  <p className="mt-2 min-h-12 text-sm leading-5 text-muted-foreground">{plan.description ?? "Everything you need to keep learning and improving."}</p>
+                  <div className="mt-7"><span className="text-2xl font-semibold tracking-tight">{formatPrice(plan.yearlyPriceCents)}</span><p className="mt-1 text-sm text-muted-foreground">per year, pending admin confirmation</p></div>
                   <div className="my-6 h-px bg-border" />
-
-                    <span className="text-2xl font-semibold tracking-tight">
-                      {new Intl.NumberFormat("fr-TN", { style: "currency", currency: "TND" }).format(plan.yearlyPriceCents / 100)}
-                    </span>
-                    <p className="mt-1 text-sm text-muted-foreground">per year, pending admin confirmation</p>
-                    <p className="mb-4 text-sm font-medium">
-                      This pack includes:
-                    </p>
-
-                    <ul className="space-y-3">
-                      <li className="flex gap-3 text-sm text-muted-foreground">
-                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                        Access to included courses
-                      </li>
-
-                      <li className="flex gap-3 text-sm text-muted-foreground">
-                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                        Learn at your own pace
-                      </li>
-
-                      <li className="flex gap-3 text-sm text-muted-foreground">
-                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                        Course progress tracking
-                      </li>
-
-                      <li className="flex gap-3 text-sm text-muted-foreground">
-                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                        Bac-specific learning access
-                      </li>
-                    </ul>
-                  </div>
-
-                  {/* CTA */}
-                  <Button
-                    className={`mt-8 h-11 w-full rounded-xl ${
-                      isPopular
-                        ? ""
-                        : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-                    }`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      void requestAccess(plan);
-                    }}
-                    disabled={isRequesting || requestStatus === "pending" || requestStatus === "approved"}
-                  >
-                    {isRequesting ? (
-                    asChild
-                    onClick={(event) => event.stopPropagation()}
-                      "Awaiting admin approval"
-                    <Link href={`/packs/checkout?plan=${encodeURIComponent(plan.id)}`}>
-                      Continue to payment <ChevronRight className="ml-2 h-4 w-4" />
-                    </Link>
-        {!loading && plans.length > 0 && (
-          <p className="mx-auto mt-8 max-w-xl text-center text-xs text-muted-foreground">
-            After approval, choose the subjects you want to study inside your Bac access.
-          </p>
+                  <div className="flex-1"><p className="mb-4 text-sm font-medium">This pack includes:</p><ul className="space-y-3">{["Access to included courses", "Learn at your own pace", "Course progress tracking", "Bac-specific learning access"].map((feature) => <li key={feature} className="flex gap-3 text-sm text-muted-foreground"><Check className="mt-0.5 size-4 shrink-0 text-primary" />{feature}</li>)}</ul></div>
+                  <Button asChild className={`mt-8 h-11 w-full rounded-xl ${isPopular ? "" : "bg-secondary text-secondary-foreground hover:bg-secondary/80"}`} onClick={(event) => event.stopPropagation()}><Link href={`/packs/checkout?plan=${encodeURIComponent(plan.id)}`}>Continue to payment <ChevronRight className="ml-2 size-4" /></Link></Button>
+                </div>
+              );
+            })}
+          </div>
         )}
+        {!loading && plans.length > 0 && <p className="mx-auto mt-8 max-w-xl text-center text-xs text-muted-foreground">Your learning space becomes available after the admin approves the submitted payment request.</p>}
       </div>
     </main>
   );
 }
-            Your learning space becomes available after the admin approves the submitted payment request.
-                      "Awaiting admin approval"

@@ -37,7 +37,10 @@ export default function BacAccessRequestsPage() {
   }
 
   useEffect(() => {
-    void loadRequests();
+    const load = async () => {
+      await loadRequests();
+    };
+    void load();
   }, []);
 
   async function decide(id: string, decision: "approved" | "rejected") {
