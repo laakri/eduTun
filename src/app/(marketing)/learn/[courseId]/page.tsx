@@ -515,6 +515,48 @@ export default function LearnCoursePage() {
     };
   }, [courseId, requestedChapter]);
 
+  useEffect(() => {
+    if (!course || course.canEdit) return;
+
+    let cancelled = false;
+
+    async function verifyAccess() {
+      try {
+        const response = await fetch(
+          `/api/learning/access?courseId=${courseId}`,
+          { cache: "no-store" },
+        );
+
+        if (!response.ok && !cancelled) {
+          setCourse(null);
+          setSelectedId(null);
+          setError(
+            response.status === 403
+              ? "Your Curio access has expired. Renew your access to continue learning."
+              : "Your learning access could not be verified.",
+          );
+        }
+      } catch {
+        // A transient network failure should not revoke an already loaded lesson.
+      }
+    }
+
+    const interval = window.setInterval(() => void verifyAccess(), 300_000);
+    const handleFocus = () => void verifyAccess();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") void verifyAccess();
+    };
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [course, courseId]);
+
   async function saveProgress(nextWatchedSeconds: number, nextCompleted = completed) {
     if (!selectedId || !course || course.canEdit) return;
     const response = await fetch("/api/learning/progress", {

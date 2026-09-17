@@ -3,6 +3,8 @@ import { requireUser } from "@/core/auth.service";
 import { db } from "@/lib/db";
 import { NotFoundError, ForbiddenError } from "@/lib/errors";
 import { ok, withErrorHandler } from "@/lib/api-response";
+import { canEditCourse } from "@/core/permissions";
+import { hasCourseAccess } from "@/lib/content-access";
 
 const updateCommentSchema = z.object({
   body: z.string().trim().min(1).max(1000),
@@ -10,12 +12,24 @@ const updateCommentSchema = z.object({
 
 async function getEditableComment(id: string) {
   const user = await requireUser();
-  const comment = await db.chapterComment.findUnique({ where: { id } });
+  const comment = await db.chapterComment.findUnique({
+    where: { id },
+    include: { chapter: { include: { course: true } } },
+  });
 
   if (!comment) throw new NotFoundError("Comment");
 
   const canManage = comment.userId === user.id || user.roles.includes("admin");
   if (!canManage) throw new ForbiddenError("You can only manage your own comments.");
+
+  if (
+    !canEditCourse(user, comment.chapter.course) &&
+    (!comment.chapter.published ||
+      !comment.chapter.course.published ||
+      !(await hasCourseAccess(user.id, comment.chapter.courseId)))
+  ) {
+    throw new ForbiddenError("Your access to this course has expired or is unavailable.");
+  }
 
   return comment;
 }

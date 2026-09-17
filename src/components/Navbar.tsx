@@ -166,9 +166,33 @@ function initials(name?: string | null) {
 
 function AccountMenu({ isManager }: { isManager: boolean }) {
   const { data: session } = useSession();
+  const [access, setAccess] = useState<{
+    bacTypeName: string | null;
+    expiresAt: string;
+  } | null>(null);
   const name = session?.user?.name;
   const email = session?.user?.email;
   const avatarUrl = (session?.user as { image?: string | null } | undefined)?.image;
+
+  useEffect(() => {
+    if (!session || isManager) return;
+    fetch("/api/bac-access-requests", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((json) => {
+        const subscription = json?.data?.subscriptions?.[0];
+        if (subscription) {
+          setAccess({
+            bacTypeName: subscription.bacType?.name ?? null,
+            expiresAt: subscription.expiresAt,
+          });
+        }
+      })
+      .catch(() => undefined);
+  }, [isManager, session]);
+
+  const expiryLabel = access
+    ? new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric" }).format(new Date(access.expiresAt))
+    : null;
 
   return (
     <DropdownMenu>
@@ -206,6 +230,14 @@ function AccountMenu({ isManager }: { isManager: boolean }) {
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
           </>
+        )}
+
+        {access && (
+          <div className="px-2.5 pb-2 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">{access.bacTypeName ?? "Bac access"}</span>
+            <span className="mx-1.5 text-muted-foreground/50">·</span>
+            Until {expiryLabel}
+          </div>
         )}
 
         <DropdownMenuGroup>
@@ -252,6 +284,17 @@ export default function Navbar() {
   const isLoggedIn = status === "authenticated";
   const isLoading = status === "loading";
   const isManager = isLoggedIn && canManageCourses(session?.user?.roles);
+
+  const isWorkspaceRoute = [
+    "/admin",
+    "/dashboard",
+    "/courses",
+    "/students",
+    "/settings",
+    "/professor",
+  ].some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+
+  if (isWorkspaceRoute) return null;
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-transparent bg-background/80 backdrop-blur-md">

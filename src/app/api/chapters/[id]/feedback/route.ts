@@ -22,12 +22,19 @@ const feedbackSchema = z.discriminatedUnion("type", [
 export const GET = withErrorHandler(
   async (_req, { params }: { params: Promise<{ id: string }> }) => {
     const { id } = await params;
+    const user = await requireUser();
     const session = await auth();
     const chapter = await db.chapter.findUnique({
       where: { id },
-      select: { course: { select: { profId: true } } },
+      include: { course: true },
     });
     if (!chapter) throw new NotFoundError("Chapter");
+    if (
+      !canEditCourse(user, chapter.course) &&
+      (!chapter.published || !chapter.course.published || !(await hasCourseAccess(user.id, chapter.courseId)))
+    ) {
+      throw new ValidationError("Unlock this course before viewing the discussion.");
+    }
 
     const [comments, votes, viewerVote] = await Promise.all([
       db.chapterComment.findMany({
@@ -98,7 +105,7 @@ export const POST = withErrorHandler(
     if (!chapter) throw new NotFoundError("Chapter");
     if (
       !canEditCourse(user, chapter.course) &&
-      !(await hasCourseAccess(user.id, chapter.courseId))
+      (!chapter.published || !chapter.course.published || !(await hasCourseAccess(user.id, chapter.courseId)))
     ) {
       throw new ValidationError(
         "Unlock this course before joining the discussion.",

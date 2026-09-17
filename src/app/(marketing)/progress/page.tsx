@@ -66,6 +66,14 @@ type ProgressData = {
   milestones: Milestone[];
 };
 
+type AccessSubscription = {
+  id: string;
+  bacTypeName: string | null;
+  planName: string;
+  expiresAt: string;
+  accessState: "active" | "expired";
+};
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en", {
     month: "short",
@@ -91,6 +99,7 @@ function initials(title: string) {
 
 export default function ProgressPage() {
   const [progress, setProgress] = useState<ProgressData | null>(null);
+  const [subscriptions, setSubscriptions] = useState<AccessSubscription[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -99,6 +108,7 @@ export default function ProgressPage() {
         const json = await response.json();
         if (!response.ok) throw new Error(json.error?.message ?? "Could not load progress.");
         setProgress(json.data?.studentProgress ?? null);
+        setSubscriptions(json.data?.subscriptions ?? []);
       })
       .catch((reason: unknown) => {
         setError(reason instanceof Error ? reason.message : "Could not load progress.");
@@ -146,6 +156,40 @@ export default function ProgressPage() {
             <Link href="/learn">Browse my courses <ArrowRight className="ml-2 size-4" /></Link>
           </Button>
         </div>
+
+        {subscriptions.length > 0 && (
+          <section className="mt-6 border-y border-border py-4">
+            <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              Your Curio access
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {subscriptions.map((subscription) => (
+                <div
+                  key={subscription.id}
+                  className={`flex items-center justify-between gap-4 border px-3 py-3 ${
+                    subscription.accessState === "active"
+                      ? "border-border"
+                      : "border-amber-500/30 bg-amber-500/5"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">
+                      {subscription.bacTypeName ?? "Bac access"}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                      {subscription.planName}
+                    </p>
+                  </div>
+                  <p className={`shrink-0 text-xs ${subscription.accessState === "active" ? "text-muted-foreground" : "font-medium text-amber-700"}`}>
+                    {subscription.accessState === "active"
+                      ? `Until ${formatDate(subscription.expiresAt)}`
+                      : `Expired ${formatDate(subscription.expiresAt)}`}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {metrics.map(({ label, value, detail, icon: MetricIcon }) => {

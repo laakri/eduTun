@@ -68,6 +68,8 @@ type CatalogData = {
     id: string;
     bacTypeName: string | null;
     planName: string;
+    expiresAt: string;
+    accessState: "active" | "expired";
     selectedCategoryIds: string[];
   }>;
 
@@ -103,6 +105,12 @@ function formatDuration(seconds: number) {
   }
 
   return `${minutes} min`;
+}
+
+function formatAccessDate(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+  }).format(new Date(value));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -666,6 +674,40 @@ export default function LearnPage() {
             stay focused on your Bac preparation.
           </p>
         </header>
+
+        {catalog.subscriptions.length > 0 && (
+          <section className="mt-6 border-y border-border py-4">
+            <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              Your Curio access
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {catalog.subscriptions.map((subscription) => (
+                <div
+                  key={subscription.id}
+                  className={`flex items-center justify-between gap-4 border px-3 py-3 ${
+                    subscription.accessState === "active"
+                      ? "border-border"
+                      : "border-amber-500/30 bg-amber-500/5"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">
+                      {subscription.bacTypeName ?? "Bac access"}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                      {subscription.planName}
+                    </p>
+                  </div>
+                  <p className={`shrink-0 text-xs ${subscription.accessState === "active" ? "text-muted-foreground" : "font-medium text-amber-700"}`}>
+                    {subscription.accessState === "active"
+                      ? `Until ${formatAccessDate(subscription.expiresAt)}`
+                      : `Expired ${formatAccessDate(subscription.expiresAt)}`}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ---------------------------------------------------------------- */}
         {/* Continue learning                                                 */}

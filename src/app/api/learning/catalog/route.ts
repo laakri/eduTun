@@ -29,16 +29,16 @@ export const GET = withErrorHandler(async (req) => {
   const searchParams = new URL(req.url).searchParams;
   const categoryId = searchParams.get("categoryId")?.trim() || null;
   const query = searchParams.get("q")?.trim() || "";
-  const [activeSubscriptions, categories, categoryRows, progressEntries] = await Promise.all([
+  const [subscriptionRows, categories, categoryRows, progressEntries] = await Promise.all([
     db.userSubscription.findMany({
       where: {
         userId: user.id,
         status: "active",
-        expiresAt: { gt: new Date() },
       },
       select: {
         id: true,
         bacTypeId: true,
+        expiresAt: true,
         plan: { select: { domainId: true, name: true } },
         bacType: { select: { name: true } },
         categorySelections: { select: { categoryId: true } },
@@ -62,6 +62,10 @@ export const GET = withErrorHandler(async (req) => {
       },
     }),
   ]);
+  const now = new Date();
+  const activeSubscriptions = subscriptionRows.filter(
+    (subscription) => subscription.expiresAt > now,
+  );
 
   const categoryLinks = categories;
   const parentMap = new Map<string, string[]>();
@@ -72,14 +76,12 @@ export const GET = withErrorHandler(async (req) => {
   }
 
   const grantedCategoryIds = new Set<string>();
-  const subscriptionsNeedingCategories = activeSubscriptions.filter(
-    (subscription) => subscription.bacTypeId && subscription.categorySelections.length === 0,
-  );
   for (const subscription of activeSubscriptions) {
-    if (subscription.bacTypeId && subscription.categorySelections.length === 0) continue;
-    const roots = subscription.categorySelections.length > 0
-      ? subscription.categorySelections.map((selection) => selection.categoryId)
-      : [subscription.plan.domainId];
+    const roots = subscription.bacTypeId
+      ? [subscription.bacTypeId]
+      : subscription.categorySelections.length > 0
+        ? subscription.categorySelections.map((selection) => selection.categoryId)
+        : [subscription.plan.domainId];
     const domainCategoryIds = new Set<string>();
     for (const root of roots) {
       for (const categoryId of collectDescendantCategoryIds(root, categoryLinks)) {
@@ -89,10 +91,10 @@ export const GET = withErrorHandler(async (req) => {
     for (const categoryId of domainCategoryIds) grantedCategoryIds.add(categoryId);
   }
 
-  const availableCategories = subscriptionsNeedingCategories.flatMap((subscription) => {
+  const availableCategories = activeSubscriptions.flatMap((subscription) => {
     const ids = new Set(
       categoryLinks
-        .filter((link) => link.parentId === subscription.bacTypeId)
+        .filter((link) => link.parentId === (subscription.bacTypeId ?? subscription.plan.domainId))
         .map((link) => link.childId),
     );
     return categoryRows.filter((category) => ids.has(category.id));
@@ -154,6 +156,7 @@ export const GET = withErrorHandler(async (req) => {
           categories: { include: { category: true } },
           tags: { include: { tag: true } },
           chapters: {
+            where: { published: true },
             select: {
               id: true,
               title: true,
@@ -169,6 +172,10 @@ export const GET = withErrorHandler(async (req) => {
     course.categories.some(({ categoryId: courseCategoryId }) =>
       canAccessCategory(courseCategoryId),
     ),
+  );
+  const accessibleCourseIds = new Set(filteredCourseRecords.map((course) => course.id));
+  const accessibleProgressEntries = progressEntries.filter((entry) =>
+    accessibleCourseIds.has(entry.chapter.courseId),
   );
 
   const accessibleCourses = filteredCourseRecords.map((course) => ({
@@ -194,7 +201,7 @@ export const GET = withErrorHandler(async (req) => {
   }));
 
   const courseProgress = filteredCourseRecords.map((course) => {
-    const entries = progressEntries.filter((entry) => entry.chapter.courseId === course.id);
+    const entries = accessibleProgressEntries.filter((entry) => entry.chapter.courseId === course.id);
     const totalChapters = course.chapters.length;
     const completedChapters = entries.filter((entry) => entry.completed).length;
     const startedChapters = entries.filter((entry) => entry.watchedSeconds > 0 || entry.completed).length;
@@ -218,12 +225,12 @@ export const GET = withErrorHandler(async (req) => {
     };
   });
 
-  const completedChapters = progressEntries.filter((entry) => entry.completed).length;
-  const inProgressChapters = progressEntries.filter((entry) => !entry.completed && entry.watchedSeconds > 0).length;
-  const totalTrackedChapters = progressEntries.length;
+  const completedChapters = accessibleProgressEntries.filter((entry) => entry.completed).length;
+  const inProgressChapters = accessibleProgressEntries.filter((entry) => !entry.completed && entry.watchedSeconds > 0).length;
+  const totalTrackedChapters = accessibleProgressEntries.length;
   const overallCompletion = totalTrackedChapters > 0 ? Math.round((completedChapters / totalTrackedChapters) * 100) : 0;
-  const activityDays = [...new Set(progressEntries.map((entry) => entry.updatedAt.toISOString().slice(0, 10)))].sort().reverse();
-  const activityLevels = progressEntries.reduce<Record<string, number>>((levels, entry) => {
+  const activityDays = [...new Set(accessibleProgressEntries.map((entry) => entry.updatedAt.toISOString().slice(0, 10)))].sort().reverse();
+  const activityLevels = accessibleProgressEntries.reduce<Record<string, number>>((levels, entry) => {
     const date = entry.updatedAt.toISOString().slice(0, 10);
     levels[date] = (levels[date] ?? 0) + 1;
     return levels;
@@ -261,7 +268,7 @@ export const GET = withErrorHandler(async (req) => {
   return ok({
     courses: accessibleCourses,
     studentProgress: {
-      totalCourses: new Set(progressEntries.map((entry) => entry.chapter.courseId)).size,
+      totalCourses: accessibleCourseIds.size,
       completedChapters,
       inProgressChapters,
       overallCompletion,
@@ -269,7 +276,7 @@ export const GET = withErrorHandler(async (req) => {
       activeDays: activityDays.length,
       activityDates: activityDays,
       activityLevels,
-      recentActivity: progressEntries.slice(0, 8).map((entry) => ({
+      recentActivity: accessibleProgressEntries.slice(0, 8).map((entry) => ({
         id: entry.id,
         courseId: entry.chapter.courseId,
         courseTitle: entry.chapter.course.title,
@@ -299,14 +306,16 @@ export const GET = withErrorHandler(async (req) => {
     },
     hasActivePack: hasActiveSubscription,
     hasActiveSubscription,
-    needsCategorySelection: subscriptionsNeedingCategories.length > 0,
-    categorySelectionSubscriptionId: subscriptionsNeedingCategories[0]?.id ?? null,
+    needsCategorySelection: false,
+    categorySelectionSubscriptionId: null,
     availableCategories: [...new Map(filterCategories.map((category) => [category.id, category])).values()],
-    subscriptions: activeSubscriptions.map((subscription) => ({
+    subscriptions: subscriptionRows.map((subscription) => ({
       id: subscription.id,
       bacTypeId: subscription.bacTypeId,
       bacTypeName: subscription.bacType?.name ?? null,
       planName: subscription.plan.name,
+      expiresAt: subscription.expiresAt,
+      accessState: subscription.expiresAt > now ? "active" : "expired",
       selectedCategoryIds: subscription.categorySelections.map((selection) => selection.categoryId),
     })),
   });

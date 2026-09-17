@@ -22,39 +22,53 @@ function collectDescendantCategoryIds(
   return ids;
 }
 
-/** A domain subscription grants access to the full category subtree. */
-export async function hasCourseAccess(userId: string, courseId: string) {
-  const [course, activeSubscriptions] = await Promise.all([
-    db.course.findUnique({
-      where: { id: courseId },
-      select: { categories: { select: { categoryId: true } } },
-    }),
+/** Resolve the categories granted by active subscriptions, including subject selections. */
+export async function getGrantedCategoryIds(userId: string) {
+  const [activeSubscriptions, categoryLinks] = await Promise.all([
     db.userSubscription.findMany({
       where: {
         userId,
         status: "active",
         expiresAt: { gt: new Date() },
       },
-      select: { plan: { select: { domainId: true } } },
+      select: {
+        bacTypeId: true,
+        plan: { select: { domainId: true } },
+        categorySelections: { select: { categoryId: true } },
+      },
     }),
+    db.categoryRelation.findMany({ select: { parentId: true, childId: true } }),
   ]);
-
-  if (!course) return false;
-
-  if (activeSubscriptions.length === 0) return false;
-
-  const categoryLinks = await db.categoryRelation.findMany({
-    select: { parentId: true, childId: true },
-  });
 
   const grantedCategoryIds = new Set<string>();
   for (const subscription of activeSubscriptions) {
-    const domainIds = collectDescendantCategoryIds(
-      subscription.plan.domainId,
-      categoryLinks,
-    );
-    for (const domainId of domainIds) grantedCategoryIds.add(domainId);
+    const roots = subscription.bacTypeId
+      ? [subscription.bacTypeId]
+      : subscription.categorySelections.length > 0
+        ? subscription.categorySelections.map((selection) => selection.categoryId)
+        : [subscription.plan.domainId];
+
+    for (const root of roots) {
+      for (const categoryId of collectDescendantCategoryIds(root, categoryLinks)) {
+        grantedCategoryIds.add(categoryId);
+      }
+    }
   }
+
+  return { categoryLinks, grantedCategoryIds };
+}
+
+/** A subscription grants access only to its selected subject subtree. */
+export async function hasCourseAccess(userId: string, courseId: string) {
+  const course = await db.course.findUnique({
+    where: { id: courseId },
+    select: { categories: { select: { categoryId: true } } },
+  });
+
+  if (!course) return false;
+
+  const { categoryLinks, grantedCategoryIds } = await getGrantedCategoryIds(userId);
+  if (grantedCategoryIds.size === 0) return false;
 
   const parentMap = new Map<string, string[]>();
   for (const link of categoryLinks) {
@@ -66,17 +80,15 @@ export async function hasCourseAccess(userId: string, courseId: string) {
   return course.categories.some(({ categoryId }) => {
     const stack: string[] = [categoryId];
     const visited = new Set<string>();
-
     while (stack.length > 0) {
       const currentId = stack.pop();
       if (!currentId || visited.has(currentId)) continue;
       visited.add(currentId);
       if (grantedCategoryIds.has(currentId)) return true;
       for (const parentId of parentMap.get(currentId) ?? []) {
-        if (!visited.has(parentId)) stack.push(parentId);
+        stack.push(parentId);
       }
     }
-
     return false;
   });
 }
