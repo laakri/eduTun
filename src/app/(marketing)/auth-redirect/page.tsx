@@ -18,7 +18,7 @@ export default function AuthRedirectPage() {
           const roles = session?.user?.roles ?? [];
           const destination = roles.some((role: string) => ["admin", "prof"].includes(role))
             ? getDefaultAppPath(roles)
-            : "/onboarding";
+            : getDefaultAppPath(roles);
           router.replace(destination);
           router.refresh();
         }

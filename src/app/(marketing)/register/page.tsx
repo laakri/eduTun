@@ -59,8 +59,6 @@ function AuthForm() {
 
   const isSignup = mode === "signup";
   const resetToken = searchParams.get("token") ?? "";
-  const verifiedStatus = searchParams.get("verified");
-  const resetStatus = searchParams.get("reset");
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -73,16 +71,8 @@ function AuthForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [devVerificationUrl, setDevVerificationUrl] = useState("");
+  const [deliveryError, setDeliveryError] = useState("");
   const [showResendVerification, setShowResendVerification] = useState(false);
-  const statusError = verifiedStatus === "invalid"
-    ? "That confirmation link is invalid or expired."
-    : "";
-  const statusSuccess = verifiedStatus === "verified"
-    ? "Email confirmed. You can sign in now."
-    : resetStatus === "success"
-      ? "Password updated. You can sign in with your new password."
-      : "";
 
   function setMode(nextMode: Mode) {
     if (nextMode === mode || isSubmitting) {
@@ -91,6 +81,7 @@ function AuthForm() {
 
     setError("");
     setSuccess("");
+    setDeliveryError("");
 
     router.replace(
       nextMode === "signup"
@@ -100,18 +91,35 @@ function AuthForm() {
   }
 
   async function afterSuccessfulAuth() {
-    const sessionResponse = await fetch("/api/auth/session", {
-      cache: "no-store",
-    });
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 8_000);
+
+    let sessionResponse: Response;
+    try {
+      sessionResponse = await fetch("/api/auth/session", {
+        cache: "no-store",
+        signal: controller.signal,
+      });
+    } finally {
+      window.clearTimeout(timeout);
+    }
+
+    if (!sessionResponse.ok) {
+      throw new Error("Your session could not be loaded. Please try again.");
+    }
 
     const session = await sessionResponse.json();
+
+    if (!session?.user) {
+      throw new Error("Your sign-in session was not created. Please try again.");
+    }
 
     const roles = session?.user?.roles ?? [];
     const destination = roles.some((role: string) => ["admin", "prof"].includes(role))
       ? getDefaultAppPath(roles)
-      : "/onboarding";
+      : getDefaultAppPath(roles);
 
-    router.push(destination);
+    router.replace(destination);
     router.refresh();
   }
 
@@ -179,12 +187,12 @@ function AuthForm() {
       throw new Error(data?.error?.message || "Unable to create your account.");
     }
 
-    setSuccess(
-      data?.data?.resentVerification
-        ? "This account is not confirmed yet. We sent a fresh confirmation link."
-        : "Account created. Confirm your email before signing in.",
-    );
-    setDevVerificationUrl(data?.data?.devVerificationUrl ?? "");
+    setSuccess(data?.data?.emailDelivered
+      ? data?.data?.resentVerification
+        ? "This account is not confirmed yet. We sent a fresh confirmation email."
+        : "Account created. Check your inbox to confirm your email."
+      : "Account created, but the confirmation email was not delivered.");
+    setDeliveryError(data?.data?.emailDeliveryError ?? "");
     setShowResendVerification(false);
     setIsSubmitting(false);
   }
@@ -194,6 +202,7 @@ function AuthForm() {
 
     setError("");
     setSuccess("");
+    setDeliveryError("");
     setIsSubmitting(true);
 
     try {
@@ -208,7 +217,7 @@ function AuthForm() {
       }
 
       setSuccess(data.data.message);
-      setDevVerificationUrl(data.data.devVerificationUrl ?? "");
+      setDeliveryError(data.data.emailDeliveryError ?? "");
       setShowResendVerification(false);
     } catch (reason: unknown) {
       setError(
@@ -239,7 +248,8 @@ function AuthForm() {
       if (!response.ok) {
         throw new Error(data.error?.message ?? "Unable to send reset email.");
       }
-      setSuccess(data.data.message);
+      setSuccess(data.data.emailDelivered ? data.data.message : "");
+      setDeliveryError(data.data.emailDelivered ? "" : data.data.message);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "Unable to send reset email.");
     } finally {
@@ -250,6 +260,10 @@ function AuthForm() {
   async function handleResetPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isSubmitting) return;
+    if (!resetToken) {
+      setError("This password reset link is missing or invalid. Request a new one.");
+      return;
+    }
     if (password.length < 8 || password !== confirmPassword) {
       setError(password.length < 8 ? "Password must be at least 8 characters." : "Passwords do not match.");
       return;
@@ -268,7 +282,8 @@ function AuthForm() {
       if (!response.ok) {
         throw new Error(data.error?.message ?? "Unable to reset password.");
       }
-      router.replace("/register?mode=login&reset=success");
+      setIsSubmitting(false);
+      router.replace("/register?mode=login");
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "Unable to reset password.");
       setIsSubmitting(false);
@@ -299,6 +314,7 @@ function AuthForm() {
         setError("Something went wrong. Please try again.");
       }
 
+    } finally {
       setIsSubmitting(false);
     }
   }
@@ -324,9 +340,15 @@ function AuthForm() {
             />
             {error && <p className="text-sm text-destructive">{error}</p>}
             {success && <p className="text-sm text-emerald-600">{success}</p>}
-            <Button className="h-12 w-full" disabled={isSubmitting}>
+            <Button type="submit" className="h-12 w-full" disabled={isSubmitting}>
               {isSubmitting ? "Sending..." : "Send reset link"}
             </Button>
+            {deliveryError && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
+                <p className="font-medium">Reset email not sent</p>
+                <p className="mt-1">{deliveryError}</p>
+              </div>
+            )}
           </form>
           <Link href="/register?mode=login" className="mt-6 block text-center text-sm text-muted-foreground hover:text-foreground">
             Back to sign in
@@ -341,7 +363,7 @@ function AuthForm() {
       <main className="min-h-screen bg-background px-6 py-16 text-foreground">
         <div className="mx-auto max-w-md">
           <h1 className="text-3xl font-semibold tracking-tight">Choose a new password</h1>
-          <form onSubmit={handleResetPassword} className="mt-8 space-y-4">
+          <form onSubmit={handleResetPassword} noValidate className="mt-8 space-y-4">
             <Input
               type="password"
               value={password}
@@ -365,7 +387,7 @@ function AuthForm() {
               className="h-12"
             />
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button className="h-12 w-full" disabled={isSubmitting}>
+            <Button type="submit" className="h-12 w-full" disabled={isSubmitting}>
               {isSubmitting ? "Updating..." : "Update password"}
             </Button>
           </form>
@@ -635,9 +657,9 @@ function AuthForm() {
                   </div>
 
                   {/* Error */}
-                  {(error || statusError) && (
+                  {error && (
                     <div className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-                      {error || statusError}
+                      {error}
                       {showResendVerification && !isSignup && (
                         <button
                           type="button"
@@ -650,17 +672,19 @@ function AuthForm() {
                     </div>
                   )}
 
-                  {(success || statusSuccess) && (
+                  {success && (
                     <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-700">
-                      {success || statusSuccess}
-                      {devVerificationUrl && (
-                        <a
-                          href={devVerificationUrl}
-                          className="mt-2 block font-medium underline underline-offset-2"
-                        >
-                          Confirm email locally
-                        </a>
-                      )}
+                      {success}
+                    </div>
+                  )}
+
+                  {deliveryError && (
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
+                      <p className="font-medium">Email delivery needs attention</p>
+                      <p className="mt-1">{deliveryError}</p>
+                      <p className="mt-2 text-xs text-amber-800/80">
+                        After verifying the domain, request a new confirmation email.
+                      </p>
                     </div>
                   )}
                 </div>

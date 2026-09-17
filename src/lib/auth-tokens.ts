@@ -72,3 +72,16 @@ export async function consumePasswordResetToken(rawToken: string) {
   await db.verificationToken.delete({ where: { token: token.token } });
   return userId;
 }
+
+export async function getPasswordResetUserId(rawToken: string) {
+  const token = await db.verificationToken.findFirst({
+    where: {
+      token: hashToken(rawToken),
+      identifier: { startsWith: "reset:" },
+      expires: { gt: new Date() },
+    },
+    select: { identifier: true },
+  });
+
+  return token ? token.identifier.slice("reset:".length) : null;
+}

@@ -10,17 +10,20 @@ export const POST = withErrorHandler(async (request) => {
   const { email: rawEmail } = await parseBody(request, schema);
   const email = rawEmail.trim().toLowerCase();
   const user = await db.user.findUnique({ where: { email } });
-  let devVerificationUrl: string | undefined;
 
   if (user?.passwordHash && !user.emailVerified) {
-    const verificationUrl = await sendVerificationEmail(user);
-    if (process.env.NODE_ENV !== "production") {
-      devVerificationUrl = verificationUrl;
-    }
+    const verification = await sendVerificationEmail(user);
+
+    return ok({
+      message: verification.delivered
+        ? "A new confirmation email has been sent."
+        : "We could not send the confirmation email.",
+      emailDelivered: verification.delivered,
+      ...(verification.error ? { emailDeliveryError: verification.error } : {}),
+    });
   }
 
   return ok({
-    message: "If the account needs confirmation, a new email has been sent.",
-    ...(devVerificationUrl ? { devVerificationUrl } : {}),
+    message: "If the account needs confirmation, a new confirmation email has been sent.",
   });
 });

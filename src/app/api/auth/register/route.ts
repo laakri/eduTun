@@ -19,14 +19,13 @@ export const POST = withErrorHandler(async (req) => {
   const existing = await db.user.findUnique({ where: { email } });
   if (existing) {
     if (existing.passwordHash && !existing.emailVerified) {
-      const verificationUrl = await sendVerificationEmail(existing);
+      const verification = await sendVerificationEmail(existing);
       return ok({
         requiresVerification: true,
         email,
         resentVerification: true,
-        ...(process.env.NODE_ENV !== "production"
-          ? { devVerificationUrl: verificationUrl }
-          : {}),
+        emailDelivered: verification.delivered,
+        ...(verification.error ? { emailDeliveryError: verification.error } : {}),
       });
     }
 
@@ -51,14 +50,13 @@ export const POST = withErrorHandler(async (req) => {
     },
   });
 
-  const verificationUrl = await sendVerificationEmail(user);
+  const verification = await sendVerificationEmail(user);
 
   // Never return passwordHash, even implicitly — select only what's safe.
   return ok({
     requiresVerification: true,
     email: user.email,
-    ...(process.env.NODE_ENV !== "production"
-      ? { devVerificationUrl: verificationUrl }
-      : {}),
+    emailDelivered: verification.delivered,
+    ...(verification.error ? { emailDeliveryError: verification.error } : {}),
   }, 201);
 });

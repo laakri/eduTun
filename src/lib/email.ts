@@ -32,7 +32,12 @@ export async function sendEmail(message: EmailMessage) {
   });
 
   if (!response.ok) {
-    throw new Error("Email delivery failed");
+    const details = await response.text();
+    console.error("Email provider rejected the message", {
+      status: response.status,
+      details,
+    });
+    throw new Error(`Email delivery failed with status ${response.status}`);
   }
 }
 
