@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Check, Loader2, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Check, Loader2, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { AdminPagination, AdminTableToolbar } from "@/components/admin/AdminTableToolbar";
 
  type AccessRequest = {
   id: string;
@@ -21,27 +22,32 @@ export default function BacAccessRequestsPage() {
   const [loading, setLoading] = useState(true);
   const [workingId, setWorkingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("all");
+  const [page, setPage] = useState(1);
+  const [pageCount, setPageCount] = useState(1);
 
-  async function loadRequests() {
+  const loadRequests = useCallback(async () => {
     try {
-      const response = await fetch("/api/admin/bac-access-requests");
+      const response = await fetch(`/api/admin/bac-access-requests?q=${encodeURIComponent(query)}&status=${status}&page=${page}`);
       const json = await response.json();
       if (!response.ok) throw new Error(json.error?.message ?? "Could not load access requests.");
-      setRequests(json.data ?? []);
+      setRequests(json.data?.items ?? []);
+      setPageCount(json.data?.pageCount ?? 1);
       setError(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not load access requests.");
     } finally {
       setLoading(false);
     }
-  }
+  }, [page, query, status]);
 
   useEffect(() => {
     const load = async () => {
       await loadRequests();
     };
     void load();
-  }, []);
+  }, [loadRequests]);
 
   async function decide(id: string, decision: "approved" | "rejected") {
     setWorkingId(id);
@@ -62,6 +68,13 @@ export default function BacAccessRequestsPage() {
     }
   }
 
+  async function removeRequest(request: AccessRequest) {
+    if (request.status === "pending" || !window.confirm("Delete this reviewed request?")) return;
+    const response = await fetch(`/api/admin/bac-access-requests?id=${request.id}`, { method: "DELETE" });
+    if (!response.ok) { const json = await response.json(); setError(json.error?.message ?? "Could not delete request."); return; }
+    setRequests((current) => current.filter((item) => item.id !== request.id));
+  }
+
   return (
     <main className="mx-auto max-w-5xl">
       <div>
@@ -72,6 +85,16 @@ export default function BacAccessRequestsPage() {
         </p>
       </div>
 
+      <div className="mt-8 bg-muted/20 p-3">
+        <AdminTableToolbar query={query} onQueryChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search learners or Bac types">
+          <select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} className="h-9 bg-background px-3 text-sm text-foreground outline-none">
+            <option value="all">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </AdminTableToolbar>
+      </div>
       {error && <p className="mt-5 text-sm text-destructive">{error}</p>}
       {loading ? (
         <div className="flex justify-center py-20"><Loader2 className="size-5 animate-spin text-muted-foreground" /></div>
@@ -103,11 +126,13 @@ export default function BacAccessRequestsPage() {
                     </Button>
                   </div>
                 )}
+                {request.status !== "pending" && <Button size="icon" variant="ghost" aria-label="Delete request" onClick={() => void removeRequest(request)}><Trash2 className="size-4 text-muted-foreground hover:text-destructive" /></Button>}
               </div>
             </Card>
           ))}
         </div>
       )}
+      {!loading && requests.length > 0 && <div className="mt-5"><AdminPagination page={page} pageCount={pageCount} onPageChange={setPage} /></div>}
     </main>
   );
 }

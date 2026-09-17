@@ -29,6 +29,8 @@ const adminLinks = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard },
   { href: "/admin/bac-access-requests", label: "Access requests", icon: ShieldCheck },
   { href: "/admin/professor-applications", label: "Professor applications", icon: UserCheck },
+  { href: "/admin/professors", label: "Professors", icon: Users },
+  { href: "/admin/students", label: "Students", icon: Users },
   { href: "/admin/categories", label: "Categories", icon: FolderTree },
 ];
 
